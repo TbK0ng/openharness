@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.uv-cache/
+
+# OpenHarness runtime state
+data/
+hook_log*
+*.log
+.openharness_worktrees/
+
+# probe scratch
+_probe/
