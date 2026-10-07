@@ -55,7 +55,8 @@ class HookOutcome:
 
 class HookManager:
     def __init__(self, config: dict) -> None:
-        raw = config.get("hooks", {})
+        # 兼容两种传参：完整 settings（含 "hooks" 键）或 事件→hooks 映射
+        raw = config["hooks"] if "hooks" in config else config
         self.hooks: dict[str, list] = {event: list(raw.get(event, [])) for event in ALL_EVENTS}
 
     # ------------------------------------------------------------------
