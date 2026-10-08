@@ -34,8 +34,13 @@ class SkillLoader:
         for d in self.dirs:
             if not d.exists():
                 continue
-            for p in sorted(d.glob("*.md")):
-                text = p.read_text(encoding="utf-8")
+            # 技能按主题组织：既支持 skills/*.md，也支持 skills/<topic>/SKILL.md
+            files = sorted(d.glob("*.md")) + sorted(d.glob("*/SKILL.md"))
+            for p in files:
+                try:
+                    text = p.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
                 meta, body = _parse_frontmatter(text)
                 name = meta.get("name") or p.stem
                 self._skills[name] = {
@@ -44,6 +49,10 @@ class SkillLoader:
                     "path": str(p),
                     "content": text,
                 }
+
+    def summary(self) -> str:
+        """给系统提示用的技能清单（教程第 8 章：只放索引，正文按需加载）。"""
+        return self.summary_for_prompt()
 
     def list_skills(self) -> List[dict]:
         return [

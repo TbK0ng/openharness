@@ -12,3 +12,4 @@ hook_log*
 
 # probe scratch
 _probe/
+_tmp_tests/
