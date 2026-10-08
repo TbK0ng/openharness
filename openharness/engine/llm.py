@@ -17,11 +17,36 @@ from langchain_openai import ChatOpenAI
 DEFAULT_MODEL_CONFIG = {
     "base_url": "http://127.0.0.1:1234/v1",
     "api_key": "lm-studio",          # LM Studio 接受任意非空 key
-    "model": "Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf",
+    # LM Studio 一次只加载一个模型，且模型名带量化后缀、换模型就变。
+    # 留空表示「向端点查询当前已加载的模型」，避免硬编码失效。
+    "model": "",
     "temperature": 0.2,
     "timeout": 300,
     "max_retries": 2,
 }
+
+
+def discover_model(base_url: str, api_key: str = "lm-studio", timeout: float = 5.0) -> str:
+    """向 OpenAI 兼容端点查询当前（已加载的）模型 id。
+
+    优先返回 status=loaded 的模型；查不到时返回空串，由调用方决定回退策略。
+    """
+    import json
+    import urllib.request
+
+    url = base_url.rstrip("/") + "/models"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception:
+        return ""
+    models = data.get("data") or []
+    for m in models:
+        status = (m.get("status") or {}).get("value")
+        if status == "loaded":
+            return m.get("id") or ""
+    return (models[0].get("id") or "") if models else ""
 
 
 def _sanitize_proxy_env() -> None:
@@ -65,6 +90,9 @@ def build_llm(config: dict) -> ChatOpenAI:
     _sanitize_proxy_env()
     m = dict(DEFAULT_MODEL_CONFIG)
     m.update(config.get("model", {}))
+    # model 留空 → 查询端点当前加载的模型（LM Studio 单模型场景）
+    if not m.get("model"):
+        m["model"] = discover_model(m["base_url"], m.get("api_key", "lm-studio"))
     timeout = m.get("timeout", 300)
     if not isinstance(timeout, httpx.Timeout):
         timeout = httpx.Timeout(timeout)
@@ -158,3 +186,13 @@ async def stream_response(context) -> LLMResponse:
     if response.text:
         context.on_text(response.text)
     return response
+
+
+async def llm_complete(context, prompt: str) -> str:
+    """不带工具的纯文本补全（供 hook 的 prompt 事件使用；在事件循环内 await）。"""
+    from langchain_core.messages import HumanMessage, SystemMessage
+    ai = await context.llm.ainvoke(
+        [SystemMessage(content="You are a helpful assistant."),
+         HumanMessage(content=prompt)]
+    )
+    return ai.content if isinstance(ai.content, str) else str(ai.content)

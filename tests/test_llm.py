@@ -1,8 +1,35 @@
-"""Test engine/llm.py against the real local endpoint 127.0.0.1:1234."""
+"""Test engine/llm.py against the real local endpoint 127.0.0.1:1234.
+
+这些是集成测试：端点不可达时自动 skip，并且每次调用都有超时上限，
+避免本地模型没起来时整个测试套件挂住。
+"""
 import asyncio
+import socket
 import unittest
 
-from openharness.engine.llm import build_llm, close_llm, stream_response
+from openharness.engine.llm import (
+    DEFAULT_MODEL_CONFIG,
+    build_llm,
+    close_llm,
+    discover_model,
+    stream_response,
+)
+
+ENDPOINT_TIMEOUT = 60  # 本地 27B 量化模型冷启动可能较慢，但不应无限等待
+
+
+def endpoint_reachable(timeout: float = 3.0) -> bool:
+    host, port = "127.0.0.1", 1234
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def skip_unless_endpoint():
+    if not endpoint_reachable():
+        raise unittest.SkipTest("127.0.0.1:1234 (LM Studio) 不可达")
 
 
 class FakeCtx:
@@ -17,17 +44,32 @@ class FakeCtx:
         self.text_chunks.append(s)
 
 
+class TestModelDiscovery(unittest.TestCase):
+    """模型名不再硬编码：端点换模型后仍能自动适配。"""
+
+    def test_discover_model_returns_loaded_model(self):
+        skip_unless_endpoint()
+        model = discover_model(DEFAULT_MODEL_CONFIG["base_url"])
+        self.assertTrue(model, "端点应返回至少一个已加载模型")
+
+    def test_build_llm_falls_back_to_discovered_model(self):
+        skip_unless_endpoint()
+        llm = build_llm({})
+        self.assertTrue(getattr(llm, "model_name", ""), "build_llm 应自动填入发现的模型")
+
+
 class TestLLMEndpoint(unittest.TestCase):
     def _run(self, coro_fn):
         """Run async work in a fresh loop, always closing the LLM client."""
         async def wrapper():
             try:
-                return await coro_fn()
+                return await asyncio.wait_for(coro_fn(), timeout=ENDPOINT_TIMEOUT)
             finally:
                 await close_llm(self.ctx.llm)
         return asyncio.run(wrapper())
 
     def setUp(self):
+        skip_unless_endpoint()
         self.ctx = None
 
     def test_simple_chat(self):
@@ -66,6 +108,8 @@ class TestLLMEndpoint(unittest.TestCase):
 
 
 def test_endpoint_reachable():
+    """端点可达性探针（不可达时 skip，不算失败）。"""
+    skip_unless_endpoint()
     import urllib.request
     urllib.request.urlopen("http://127.0.0.1:1234/v1/models", timeout=5)
 

@@ -33,7 +33,7 @@ class PermissionDecision:
 
 class PermissionChecker:
     def __init__(self, config: dict) -> None:
-        self.mode: str = config.get("permission_mode", "default")
+        self.mode: str = config.get("permission_mode") or config.get("mode") or "default"
         self.denied_tools: set = set(config.get("deny_tools", []))
         self.deny_paths: List[str] = list(config.get("deny_paths", []))
         self.deny_commands: List[str] = list(config.get("deny_commands", []))

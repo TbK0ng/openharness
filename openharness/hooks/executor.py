@@ -42,6 +42,31 @@ ALL_EVENTS = (SESSION_START, SESSION_END, PRE_TOOL_USE, POST_TOOL_USE)
 COMMAND_TIMEOUT = 30
 
 
+def _await_in_thread(coro):
+    """在独立线程里跑协程并取回结果。
+
+    HookManager.run() 是同步 API，但它可能被已经是 async 的代码
+    （execute_tool_with_hooks、后台任务线程）调用；此时不能再起一个
+    事件循环或直接 await，所以用一根一次性线程 + asyncio.run 隔离。
+    """
+    import asyncio
+    import threading
+    box: dict = {}
+
+    def _go():
+        try:
+            box["value"] = asyncio.run(coro)
+        except Exception as exc:  # noqa: BLE001 — 转为 hook 故障，不阻塞主流程
+            box["error"] = exc
+
+    t = threading.Thread(target=_go, daemon=True)
+    t.start()
+    t.join()
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
 @dataclass
 class HookOutcome:
     blocked: bool = False
@@ -162,7 +187,9 @@ class HookManager:
         prompt += f"\n\nTool call details:\n{json.dumps(payload, ensure_ascii=False, default=str)[:3000]}"
         prompt += "\n\nRespond with exactly 'allow' or 'block: <reason>'."
         from ..engine.llm import llm_complete
-        answer = llm_complete(context, prompt)
+        # HookManager.run() 是同步 API（且可能已在事件循环内被调用），
+        # 因此这里与 agent hook 一致：把协程放到独立线程里跑。
+        answer = _await_in_thread(llm_complete(context, prompt))
         answer = (answer or "").strip().lower()
         if answer.startswith("block"):
             reason = answer.split(":", 1)[1].strip() if ":" in answer else "prompt hook"
