@@ -10,6 +10,20 @@ class CronCreateTool(BaseTool):
         "Schedule a recurring job. schedule = 5-field cron expression, "
         "kind = 'command' or 'agent', prompt/command = what to run."
     )
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "schedule": {"type": "string",
+                         "description": "5-field cron expression, e.g. '*/5 * * * *'."},
+            "kind": {"type": "string", "enum": ["command", "agent"],
+                     "description": "What to run when the job fires."},
+            "command": {"type": "string",
+                        "description": "Shell command to run (when kind='command')."},
+            "prompt": {"type": "string",
+                       "description": "Prompt for the sub-agent (when kind='agent')."},
+        },
+        "required": ["schedule", "kind"],
+    }
 
     async def execute(self, params, context):
         mgr = context.cron
@@ -27,6 +41,8 @@ class CronCreateTool(BaseTool):
 class CronListTool(BaseTool):
     name = "CronList"
     description = "List all scheduled cron jobs."
+    input_schema = {"type": "object", "properties": {}}
+    read_only = True
 
     async def execute(self, params, context):
         mgr = context.cron
@@ -41,6 +57,13 @@ class CronListTool(BaseTool):
 class CronDeleteTool(BaseTool):
     name = "CronDelete"
     description = "Delete a scheduled cron job by job_id."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "job_id": {"type": "string", "description": "Id of the cron job to delete."},
+        },
+        "required": ["job_id"],
+    }
 
     async def execute(self, params, context):
         mgr = context.cron

@@ -66,6 +66,7 @@ class Engine:
         self._connect_mcp()
         self._register_builtin_commands()
         self._sid: Optional[str] = None
+        self._ctx: Optional[object] = None   # create_context() 后指向当前会话
 
     # ---- 配置 ----
     def _load_config(self, config_path: Optional[str]) -> dict:
@@ -111,14 +112,22 @@ class Engine:
         self.mcp_status = self.mcp.connect_all()
 
     def _register_builtin_commands(self) -> None:
+        """注册内置斜杠命令（第 3 章 Commands 子系统）。
+
+        register(name, help_text, fn) —— 与 CommandRegistry 的签名一致。
+        """
         c = self.commands
-        c.register("help", self._cmd_help)
-        c.register("mode", self._cmd_mode)
-        c.register("memory", self._cmd_memory)
-        c.register("skills", self._cmd_skills)
-        c.register("tasks", self._cmd_tasks)
-        c.register("cron", self._cmd_cron)
-        c.register("exit", self._cmd_exit)
+        c.register("help", "列出所有可用命令", self._cmd_help)
+        c.register("mode", "查看/切换权限模式 [default|plan|full-auto]", self._cmd_mode)
+        c.register("memory", "显示当前长期记忆 (MEMORY.md)", self._cmd_memory)
+        c.register("skills", "列出已发现的技能", self._cmd_skills)
+        c.register("tasks", "列出后台任务", self._cmd_tasks)
+        c.register("cron", "列出定时任务", self._cmd_cron)
+        c.register("tools", "列出已注册工具", self._cmd_tools)
+        c.register("mcp", "显示 MCP 服务器连接状态", self._cmd_mcp)
+        c.register("agents", "列出子 Agent", self._cmd_agents)
+        c.register("clear", "清空当前会话消息历史", self._cmd_clear)
+        c.register("exit", "退出会话", self._cmd_exit)
 
     # ---- Context ----
     def create_context(self) -> Context:
@@ -144,6 +153,7 @@ class Engine:
         )
         # 注入会话上下文供后台子系统使用
         self.cron.context = ctx
+        self._ctx = ctx   # 供 /clear 等命令操作当前会话
         return ctx
 
     def _session_id(self) -> str:
@@ -199,6 +209,29 @@ class Engine:
 
     def _cmd_cron(self, args: str) -> str:
         return self.cron.summary() or "（无定时任务）"
+
+    def _cmd_tools(self, args: str) -> str:
+        tools = self.registry.list_tools()
+        lines = [f"{'[只读]' if t.read_only else '[写入]'} {t.name} — {t.description}"
+                 for t in tools]
+        return f"已注册 {len(tools)} 个工具：\n" + "\n".join(lines)
+
+    def _cmd_mcp(self, args: str) -> str:
+        if not self.mcp_status:
+            return "未配置 MCP 服务器（settings.json 的 mcp_servers）"
+        return "\n".join(f"{name}: {status}" for name, status in self.mcp_status.items())
+
+    def _cmd_agents(self, args: str) -> str:
+        agents = self.team.list()
+        if not agents:
+            return "（无子 Agent）"
+        return "\n".join(f"{a.agent_id} [{a.agent_type}] {a.status} — {a.name}"
+                         for a in agents)
+
+    def _cmd_clear(self, args: str) -> str:
+        if self._ctx is not None:
+            self._ctx.messages.clear()
+        return "已清空会话历史"
 
     def _cmd_exit(self, args: str) -> str:
         raise SystemExit

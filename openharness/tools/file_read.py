@@ -17,6 +17,8 @@ class ReadTool(BaseTool):
         },
         "required": ["file_path"],
     }
+    # 第 6 章：只读工具在 default 模式自动通过、plan 模式允许执行
+    read_only = True
 
     async def execute(self, params, context) -> ToolResult:
         import pathlib
