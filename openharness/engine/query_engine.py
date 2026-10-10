@@ -189,7 +189,7 @@ class Engine:
 
     # ---- 内置命令 ----
     def _cmd_help(self, args: str) -> str:
-        lines = [f"{c.name} — {c.description}" for c in self.commands.list()]
+        lines = [f"/{c.name} — {c.help_text}" for c in self.commands.list()]
         return "可用命令：\n" + "\n".join(lines)
 
     def _cmd_mode(self, args: str) -> str:
