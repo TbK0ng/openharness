@@ -79,11 +79,22 @@ def _print_assistant(text: str) -> None:
     _emit(f"\n[assistant] {text}\n")
 
 
-def run_once(engine: Engine, prompt: str, max_turns: int | None) -> str:
-    """跑一轮完整的 Agent Loop（第 12 章第 3-8 步）。"""
+def _interactive_ask(prompt: str) -> str:
+    """权限审批回调（第 12 章：CLI 必须把 ask_user 接到真实输入）。"""
+    try:
+        return input(f"\n🔐 {prompt} [y/n]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
+
+def run_once(engine: Engine, prompt: str, max_turns: int | None,
+             interactive: bool = False) -> str:
+    """跑一轮完整的 Agent Loop（第 12 章第 3–8 步）。"""
     ctx = engine.create_context()
     if max_turns:
         ctx.max_turns = max_turns
+    if interactive:
+        ctx.ask_user = _interactive_ask
     ctx.messages.append({"role": "user", "content": prompt})
     ctx.on_event = _emit
     return run_query_sync(ctx)
@@ -122,7 +133,7 @@ def interactive(engine: Engine, max_turns: int | None) -> int:
             _handle_command(engine, line)
             continue
         try:
-            _print_assistant(run_once(engine, line, max_turns))
+            _print_assistant(run_once(engine, line, max_turns, interactive=True))
         except KeyboardInterrupt:
             print("\n(已中断当前请求)")
         except SystemExit:
