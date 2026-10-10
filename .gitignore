@@ -10,6 +10,10 @@ hook_log*
 *.log
 .openharness_worktrees/
 
-# probe scratch
+# probe scratch & test runtime artifacts
 _probe/
 _tmp_tests/
+oh_hooks_*/
+oh_test_*/
+pytest-cache-files-*/
+.pytest_cache/
