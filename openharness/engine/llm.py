@@ -136,7 +136,13 @@ def _from_langchain(ai: AIMessage) -> LLMResponse:
             "name": tc["name"],
             "arguments": tc.get("args") or {},
         })
-    stop_reason = "tool_use" if tool_calls else "end_turn"
+    finish = (getattr(ai, "response_metadata", None) or {}).get("finish_reason", "")
+    if tool_calls:
+        stop_reason = "tool_use"
+    elif finish == "length":
+        stop_reason = "max_tokens"      # Path 1：输出截断
+    else:
+        stop_reason = "end_turn"
     usage = {}
     um = getattr(ai, "usage_metadata", None)
     if um:
@@ -171,12 +177,19 @@ async def close_llm(llm: ChatOpenAI) -> None:
             pass
 
 
-async def stream_response(context) -> LLMResponse:
+async def stream_response(context, max_tokens: int = None) -> LLMResponse:
     """教程第 4 章第 1 步：把消息发给 LLM，获取响应。
 
     context 需提供: llm (ChatOpenAI), messages (dict 列表), tool_schemas, on_text。
+    max_tokens: Path 1 升级后的输出上限（None 用模型默认）。
     """
     llm = context.llm
+    # Path 3：备用模型切换（recovery_state.current_model）
+    st = getattr(context, "recovery_state", None)
+    if st is not None and getattr(st, "current_model", None):
+        llm = llm.bind(model=st.current_model)
+    if max_tokens is not None:
+        llm = llm.bind(max_tokens=max_tokens)
     lc_messages = to_langchain_messages(
         [{"role": "system", "content": context.system_prompt}] + context.messages
     )
