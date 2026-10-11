@@ -1,0 +1,28 @@
+{
+  "_说明": "复制本文件为 settings.json 并按需修改。所有键均可省略，缺省值见 openharness/engine/query_engine.py 的 default_config()。",
+
+  "provider": "lmstudio",
+  "base_url": "http://127.0.0.1:1234/v1",
+  "model": "",
+
+  "max_turns": 30,
+
+  "permissions": {
+    "mode": "default",
+    "deny_tools": [],
+    "deny_paths": ["secrets/", ".env"],
+    "deny_commands": []
+  },
+
+  "hooks": {},
+
+  "mcp_servers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+    }
+  },
+
+  "skills_dirs": ["skills"],
+  "memory_dir": "memory"
+}
