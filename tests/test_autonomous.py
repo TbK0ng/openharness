@@ -128,5 +128,56 @@ class TestRunUntilDone(unittest.TestCase):
         self.assertEqual(b._load(t["id"])["status"], "completed")
 
 
+class TestIdentityReinject(unittest.TestCase):
+    def test_short_messages_get_identity(self):
+        from openharness.agents.autonomous import reinject_identity
+        msgs = [{"role": "user", "content": "summary"}]
+        reinject_identity(msgs, "alice", "backend")
+        self.assertEqual(msgs[0]["content"],
+                         "<identity>You are 'alice', role: backend. Continue your work.</identity>")
+
+    def test_long_messages_untouched(self):
+        from openharness.agents.autonomous import reinject_identity
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(5)]
+        reinject_identity(msgs, "alice", "backend")
+        self.assertEqual(len(msgs), 5)  # 未注入
+
+
+class TestShutdownRequest(unittest.TestCase):
+    def test_shutdown_in_idle(self):
+        b = _board()
+        inbox = Inbox()
+        inbox.send("tm", {"type": "shutdown_request"})
+        tm = Teammate(name="tm", board=b, inbox=inbox)
+        work = idle_poll(tm)
+        self.assertEqual(work["kind"], "shutdown")
+        self.assertEqual(tm.state, "shutdown")
+
+    def test_run_until_done_stops_on_shutdown(self):
+        b = _board()
+        t = b.create("t")
+        inbox = Inbox()
+        inbox.send("tm", {"type": "shutdown_request"})
+        tm = Teammate(name="tm", board=b, inbox=inbox)
+        work = _FakeWork()
+        done = run_until_done(tm, work)
+        self.assertEqual(done, 0)  # 没干任何活
+        self.assertEqual(tm.state, "shutdown")
+        self.assertIsNone(b._load(t["id"])["assignee"])  # 任务没被认领
+
+
+class TestConsumeLeadInbox(unittest.TestCase):
+    def test_injects_into_history(self):
+        from openharness.agents.autonomous import consume_lead_inbox
+        inbox = Inbox()
+        inbox.send("lead", "alice done: schema.sql")
+        inbox.send("lead", {"type": "result", "content": "bob done: api.py"})
+        history = []
+        msgs = consume_lead_inbox(inbox, "lead", history)
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history[0]["content"], "alice done: schema.sql")
+        self.assertEqual(history[1]["content"], "bob done: api.py")
+
 if __name__ == "__main__":
     unittest.main()
