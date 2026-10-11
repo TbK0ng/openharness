@@ -41,6 +41,11 @@ class Context:
     tasks: Optional[object] = None
     cron: Optional[object] = None
     config: dict = field(default_factory=dict)
+    # s05/s08/s11 会话状态（工具与循环共同读写）
+    todo_state: Optional[object] = None
+    compact_breaker: Optional[object] = None
+    recovery_state: Optional[object] = None
+    task_board: Optional[object] = None
     # 控制
     mode: str = "default"
     max_turns: int = 50
@@ -56,9 +61,16 @@ class Context:
 
 async def run_query(context: Context) -> str:
     """执行 Agent Loop，直到任务完成或达到 max_turns。返回最终文本。"""
+    from .compact import maybe_auto_compact
+    from .recovery import call_with_recovery
+    from ..tools.meta_todo import todo_nag_due
+
     for _turn in range(context.max_turns):
-        # 第 1 步：把消息发给 LLM，获取响应
-        response: LLMResponse = await stream_response(context)
+        # s08：回合预检——上下文超阈值时先做 LLM 摘要压缩
+        await maybe_auto_compact(context)
+
+        # 第 1 步：把消息发给 LLM，获取响应（s11：带重试/退避/升级）
+        response: LLMResponse = await call_with_recovery(context)
 
         # 第 2 步：LLM 返回响应——文本（任务完成）或工具调用
         if not response.has_tool_calls:
@@ -77,6 +89,18 @@ async def run_query(context: Context) -> str:
                 "content": result.to_text(),
             })
             context.display(f"   ↳ 返回 {len(result.to_text())} 字符")
+
+        # s05：TodoWrite nag——连续 3 回合没更新清单且仍有未完成项时注入提醒
+        st = getattr(context, "todo_state", None)
+        if st is not None and st.items:
+            st.turns_since_write += 1
+            if todo_nag_due(context):
+                context.display("⏰ 待办清单已 3 个回合未更新，请推进状态")
+                context.messages.append({
+                    "role": "system",
+                    "content": "Reminder: your todo list has open items that were not "
+                               "updated for 3 turns. Update statuses with TodoWrite.",
+                })
 
         # 第 4 步：回到循环顶部（自动）
 

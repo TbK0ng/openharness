@@ -69,7 +69,7 @@ class TestSlashCommands(unittest.TestCase):
     def test_tools_command_lists_all_tools(self):
         out = self.engine.commands.get("tools").fn("")
         self.assertIn("Read", out)
-        self.assertIn("29", out)
+        self.assertIn("36", out)
 
     def test_skills_and_memory_commands_render(self):
         self.assertTrue(self.engine.commands.get("skills").fn(""))

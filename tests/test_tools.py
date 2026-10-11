@@ -18,6 +18,7 @@ EXPECTED_READ_ONLY = {
     "Read", "Glob", "Grep", "WebFetch", "WebSearch", "ToolSearch",
     "Skill", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode",
     "TaskGet", "TaskList", "ListMcpResources", "ReadMcpResource", "CronList",
+    "TodoWrite", "ListTasks", "GetTask", "Compact",
 }
 
 
@@ -59,7 +60,7 @@ class TestToolRegistry(unittest.TestCase):
 
     def test_registers_all_builtin_tools(self):
         self.assertEqual(len(self.reg.list_tools()), len(BUILTIN_TOOLS))
-        self.assertEqual(len(BUILTIN_TOOLS), 29)  # 教程第 5 章的 29 个内置工具
+        self.assertEqual(len(BUILTIN_TOOLS), 36)  # 教程第 5 章 29 个 + 第 12/17 章 7 个
 
     def test_every_tool_has_name_description_and_schema(self):
         for t in self.reg.list_tools():
@@ -70,7 +71,7 @@ class TestToolRegistry(unittest.TestCase):
 
     def test_json_schema_shape_for_llm(self):
         schemas = self.reg.get_tool_schemas()
-        self.assertEqual(len(schemas), 29)
+        self.assertEqual(len(schemas), 36)
         for s in schemas:
             self.assertEqual(s["type"], "function")
             self.assertIn("name", s["function"])

@@ -30,7 +30,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
-from ..tools.base import ToolResult
+# 注意：ToolResult 在函数内延迟导入，避免 hooks → tools → engine → query → hooks 的循环导入
 
 SESSION_START = "session_start"
 SESSION_END = "session_end"
@@ -227,6 +227,8 @@ async def execute_tool_with_hooks(context, tool_call: dict) -> ToolResult:
     第 3 步：真正执行工具。
     第 4 步：执行 PostToolUse 钩子。
     """
+    from ..tools.base import ToolResult
+
     name = tool_call.get("name", "")
     params = tool_call.get("arguments") or {}
 
