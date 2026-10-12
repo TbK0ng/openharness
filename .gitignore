@@ -15,5 +15,6 @@ _probe/
 _tmp_tests/
 oh_hooks_*/
 oh_test_*/
+tmp*/
 pytest-cache-files-*/
 .pytest_cache/
