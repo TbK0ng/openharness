@@ -161,13 +161,21 @@ class TestInitCommand(unittest.TestCase):
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["max_turns"], 5)
 
     def test_copies_example_when_present(self):
-        (self.root / "settings.example.json").write_text(
+        (self.root / "examples").mkdir()
+        (self.root / "examples" / "settings.example.json").write_text(
             '{"max_turns": 42}', encoding="utf-8")
 
-        self.engine.commands.get("init").fn("")
+        out = self.engine.commands.get("init").fn("")
 
         target = self.root / ".oh" / "settings.json"
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["max_turns"], 42)
+        self.assertIn("settings.example.json", out)
+
+    def test_falls_back_to_repo_examples(self):
+        # No local examples/ — the repo-level examples/ must still be found.
+        from openharness.paths import example_path
+
+        self.assertIsNotNone(example_path("settings.example.json"))
 
 
 if __name__ == "__main__":
