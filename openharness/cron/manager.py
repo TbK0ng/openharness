@@ -1,6 +1,6 @@
 """定时任务调度 — 第 5 章调度类（CronCreate/CronList/CronDelete）。
 
-CronManager 持久化到 data/cron.json；后台线程每秒检查到期任务并触发：
+CronManager 持久化到 <root>/data/cron.json（root 通常是 .oh/）；后台线程每秒检查到期任务并触发：
     command — 直接 shell 执行
     agent   — 通过 TaskManager 创建后台 agent 任务
 """

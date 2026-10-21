@@ -7,7 +7,7 @@ Agent Loop、三级权限护栏、MCP、技能、记忆、钩子、多 Agent 协
 
 ```bash
 uv sync                      # 安装依赖（httpx / langchain-core / langchain-openai）
-uv run pytest tests          # 195 个测试（190 passed + 5 需 LM Studio 的用例跳过）
+uv run pytest tests          # 256 个测试（251 passed + 5 需 LM Studio 的用例跳过）
 uv run python -m openharness.cli "列出当前目录的文件" --no-banner
 ```
 
@@ -37,17 +37,33 @@ uv run python -m openharness.cli "列出当前目录" --provider deepseek
 ## CLI
 
 ```
-openharness [prompt...] [--cwd DIR] [--config settings.json]
-            [--mode default|plan|full-auto] [--max-turns N] [--no-banner]
+openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepseek]
+            [--model NAME] [--mode default|plan|full-auto] [--max-turns N] [--no-banner]
 ```
 
-- 交互命令：`/help` `/tools` `/memory` `/mode` `/tasks` `/agents` `/mcp` `/skills` `/cron` `/clear` `/exit`（见 `engine/query_engine.py::_register_builtin_commands`）。
+- 交互命令：`/help` `/tools` `/memory` `/mode` `/tasks` `/agents` `/mcp` `/skills` `/cron` `/init` `/clear` `/exit`（见 `engine/query_engine.py::_register_builtin_commands`）。
 - 权限询问走真实 stdin（`ask_user`），非交互环境默认拒绝。
 
-## 配置
+## 配置目录：`.oh/`
 
-复制 `settings.example.json` 为 `settings.json`，键与 `engine/query_engine.py::default_config()` 一一对应：
-provider / base_url / model / max_turns / permissions / hooks / mcp_servers / skills_dirs / memory_dir。
+所有运行时状态集中在项目根目录的 `.oh/`，不再散落在项目根：
+
+```
+.oh/
+├── settings.json      # 配置（等价于旧的 ./settings.json）
+├── memory/            # 记忆条目（Markdown + frontmatter）
+├── MEMORY.md          # 记忆索引
+├── .tasks/            # 任务看板（每个任务一个 JSON）
+├── data/cron.json     # 定时任务
+├── worktrees/         # EnterWorktree 创建的隔离工作区
+├── plugins/           # 插件（*.py）
+└── skills/            # 插件注册的技能
+```
+
+- 复制 `settings.example.json` 为 `.oh/settings.json`，或在交互模式里执行 `/init` 自动生成。
+- 配置里的相对路径（`skills_dirs` / `memory_dir` / `plugins_dir`）一律以 `.oh/` 为根；绝对路径原样使用。
+- 目录名可用环境变量 `OH_DIR` 覆盖（例如测试隔离）。
+- 兼容性：`./settings.json` 仍会被读取（`.oh/settings.json` 优先），便于从旧版本迁移。
 
 ## 结构
 
@@ -66,7 +82,7 @@ provider / base_url / model / max_turns / permissions / hooks / mcp_servers / sk
 
 ## 验证记录
 
-- `uv run pytest tests`：190 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
+- `uv run pytest tests`：251 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
 - 真实 LLM 冒烟：`uv run python -m openharness.cli "用 bash 工具列出当前目录的文件" --no-banner --max-turns 4`
   —— 模型自主调用 Glob/Read，权限询问正常弹出，回合上限生效。
 - Agent Loop 离线冒烟：用假 LLM 注入 ToolCall，验证「调用工具 → 结果回填 → 下一回合 → 返回文本」全链路。

@@ -34,6 +34,8 @@ class Context:
     registry: object
     permissions: object
     hooks: object
+    # 配置目录（.oh/）——任务板、cron 等持久化状态的根
+    oh_dir: Optional[str] = None
     memory: Optional[object] = None
     skills: Optional[object] = None
     mcp: Optional[object] = None

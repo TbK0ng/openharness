@@ -11,10 +11,16 @@ from ..tools.base import BaseTool, ToolResult
 from ..tasks.board import TaskBoard, TaskBlockedError, TaskNotFoundError
 
 def _board(context) -> TaskBoard:
-    """从 context.cwd 构造（或复用）任务板。"""
+    """从配置目录 .oh/ 构造（或复用）任务板。
+
+    优先用 Engine 提供的 oh_dir；直接构造 Context 的场合回退到 cwd/.oh。
+    """
+    from ..paths import oh_dir
+
+    base = getattr(context, "oh_dir", None) or oh_dir(context.cwd)
     board = getattr(context, "task_board", None)
-    if board is None or str(board.root) != str(pathlib.Path(context.cwd)):
-        board = TaskBoard(context.cwd)
+    if board is None or str(board.root) != str(base):
+        board = TaskBoard(base)
         context.task_board = board
     return board
 

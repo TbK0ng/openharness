@@ -82,6 +82,7 @@ def build_sub_context(parent, task: SubTask):
     return Context(
         session_id=f"sub-{task.agent_id}",
         cwd=parent.cwd,
+        oh_dir=getattr(parent, "oh_dir", None),
         messages=[],
         system_prompt=SUBAGENT_SYSTEM.get(
             task.agent_type, SUBAGENT_SYSTEM["general-purpose"]),

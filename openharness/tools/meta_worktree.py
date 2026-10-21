@@ -30,7 +30,9 @@ class EnterWorktreeTool(BaseTool):
     async def execute(self, params, context) -> ToolResult:
         name = params["name"]
         base = pathlib.Path(context.cwd)
-        wt_root = base / ".openharness_worktrees"
+        from ..paths import oh_dir
+        wt_root = (pathlib.Path(context.oh_dir) if getattr(context, "oh_dir", None)
+                   else oh_dir(base)) / "worktrees"
         wt = wt_root / name
         if wt.exists():
             # 已存在，直接切换
@@ -47,9 +49,9 @@ class EnterWorktreeTool(BaseTool):
             r = _run(["git", "worktree", "add", str(wt), "-b", f"worktree-{name}"], str(base))
             if r.returncode != 0:
                 # 回退：复制
-                shutil.copytree(base, wt, ignore=shutil.ignore_patterns(".git", ".openharness_worktrees"))
+                shutil.copytree(base, wt, ignore=shutil.ignore_patterns(".git", ".oh", ".openharness_worktrees"))
         else:
-            shutil.copytree(base, wt, ignore=shutil.ignore_patterns(".git", ".openharness_worktrees"))
+            shutil.copytree(base, wt, ignore=shutil.ignore_patterns(".git", ".oh", ".openharness_worktrees"))
         prev = getattr(context, "_worktree_prev_cwd", None)
         if prev is None:
             context._worktree_prev_cwd = str(base)

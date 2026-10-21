@@ -94,8 +94,9 @@ class TestPluginLoadDir(unittest.TestCase):
 class TestEnginePluginWiring(unittest.TestCase):
     def test_plugin_tool_command_skill_reach_engine(self):
         cwd = Path(tempfile.mkdtemp(prefix="oh_test_"))
-        (cwd / "plugins").mkdir()
-        (cwd / "plugins" / "demo.py").write_text(PLUGIN_SOURCE, encoding="utf-8")
+        plugin_dir = cwd / ".oh" / "plugins"
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "demo.py").write_text(PLUGIN_SOURCE, encoding="utf-8")
 
         engine = Engine(cwd=str(cwd))
 

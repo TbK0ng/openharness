@@ -2,7 +2,7 @@
 
 与 background tasks（manager.py，s13）不同：这里的任务有显式的
 blockedBy 依赖图，必须先完成阻塞者才能 claim。每个任务是一个
-`.tasks/{id}.json` 文件，状态机 pending → in_progress → completed。
+`{root}/.tasks/{id}.json` 文件，状态机 pending → in_progress → completed。
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _new_id() -> str:
 
 
 class TaskBoard:
-    """持久化任务板：cwd/.tasks/*.json。
+    """持久化任务板：<root>/.tasks/*.json（root 通常是 .oh/）。
 
     字段（一比一对应 s12）：
       id / subject / description / status / blockedBy / createdAt / completedAt

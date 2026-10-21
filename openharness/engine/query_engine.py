@@ -20,6 +20,7 @@ from ..cron.manager import CronManager
 from ..hooks.executor import HookManager
 from ..mcp.client import MCPClientManager
 from ..memory.manager import MemoryManager
+from ..paths import ensure_oh_dir
 from ..permissions.checker import PermissionChecker
 from ..plugins.registry import PluginContext, PluginRegistry
 from ..skills.loader import SkillLoader
@@ -41,23 +42,26 @@ def default_config(cwd: Path) -> dict:
         "permissions": {"mode": "default", "deny_tools": [], "deny_paths": [], "deny_commands": []},
         "hooks": {},
         "mcp_servers": {},
+        # 相对路径一律以配置目录 .oh/ 为根
         "skills_dirs": ["skills"],
         "memory_dir": "memory",
+        "plugins_dir": "plugins",
     }
 
 
 class Engine:
     def __init__(self, cwd: Optional[str] = None, config_path: Optional[str] = None):
         self.cwd = Path(cwd or Path.cwd())
+        self.oh_dir = ensure_oh_dir(self.cwd)
         self.config = self._load_config(config_path)
         # 子系统
-        self.memory = MemoryManager(self.cwd)
-        self.skills = SkillLoader([self.cwd / d for d in self.config["skills_dirs"]])
+        self.memory = MemoryManager(self.oh_dir, subdir=self.config["memory_dir"])
+        self.skills = SkillLoader(self._resolve_dirs(self.config["skills_dirs"]))
         self.hooks = HookManager(self.config)
         self.permissions = PermissionChecker(self.config["permissions"])
         self.team = TeamRegistry(engine=self)
         self.tasks = TaskManager(self.cwd)
-        self.cron = CronManager(self.cwd / "data")
+        self.cron = CronManager(self.oh_dir)
         self.mcp = MCPClientManager(self.config, self.cwd)
         self.registry = self._new_registry()
         self.commands = CommandRegistry()
@@ -72,12 +76,25 @@ class Engine:
         self._ctx: Optional[object] = None   # create_context() 后指向当前会话
 
     # ---- 配置 ----
+    def _resolve_dirs(self, dirs) -> list[Path]:
+        """相对路径以 .oh/ 为根；绝对路径原样使用。"""
+        out = []
+        for d in dirs or []:
+            p = Path(d)
+            out.append(p if p.is_absolute() else self.oh_dir / p)
+        return out
+
     def _load_config(self, config_path: Optional[str]) -> dict:
         cfg = default_config(self.cwd)
-        p = Path(config_path or (self.cwd / "settings.json"))
-        if p.exists():
-            user = json.loads(p.read_text(encoding="utf-8"))
-            self._deep_update(cfg, user)
+        candidates = [Path(config_path)] if config_path else [
+            self.oh_dir / "settings.json",
+            self.cwd / "settings.json",          # 兼容旧位置
+        ]
+        for p in candidates:
+            if p.exists():
+                user = json.loads(p.read_text(encoding="utf-8"))
+                self._deep_update(cfg, user)
+                break
         return cfg
 
     @staticmethod
@@ -98,7 +115,7 @@ class Engine:
         register_builtin_tools(self.registry)
 
     def _load_plugins(self) -> None:
-        plugin_dir = self.cwd / "plugins"
+        plugin_dir = self.oh_dir / self.config.get("plugins_dir", "plugins")
         if not plugin_dir.exists():
             self.plugin_names = []
             return
@@ -138,6 +155,7 @@ class Engine:
         c.register("tools", "列出已注册工具", self._cmd_tools)
         c.register("mcp", "显示 MCP 服务器连接状态", self._cmd_mcp)
         c.register("agents", "列出子 Agent", self._cmd_agents)
+        c.register("init", "生成 .oh/settings.json 配置模板", self._cmd_init)
         c.register("clear", "清空当前会话消息历史", self._cmd_clear)
         c.register("exit", "退出会话", self._cmd_exit)
 
@@ -147,6 +165,7 @@ class Engine:
         ctx = Context(
             session_id=self._session_id(),
             cwd=str(self.cwd),
+            oh_dir=str(self.oh_dir),
             messages=[],
             system_prompt=system_prompt,
             tool_schemas=self.registry.get_tool_schemas(),
@@ -250,6 +269,19 @@ class Engine:
             return "（无子 Agent）"
         return "\n".join(f"{a.agent_id} [{a.agent_type}] {a.status} — {a.name}"
                          for a in agents)
+
+    def _cmd_init(self, args: str) -> str:
+        """把 settings.example.json 复制成 .oh/settings.json（不覆盖已有文件）。"""
+        target = self.oh_dir / "settings.json"
+        if target.exists():
+            return f"配置已存在，未覆盖：{target}"
+        example = self.cwd / "settings.example.json"
+        if example.exists():
+            target.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+            return f"已生成 {target}（来自 settings.example.json）"
+        target.write_text(json.dumps(default_config(self.cwd), indent=2,
+                                     ensure_ascii=False) + "\n", encoding="utf-8")
+        return f"已生成 {target}（默认配置）"
 
     def _cmd_clear(self, args: str) -> str:
         if self._ctx is not None:

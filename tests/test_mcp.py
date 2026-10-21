@@ -96,7 +96,8 @@ class TestMcpTools(unittest.TestCase):
 
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="oh_test_"))
-        (self.dir / "settings.json").write_text(
+        (self.dir / ".oh").mkdir(exist_ok=True)
+        (self.dir / ".oh" / "settings.json").write_text(
             json.dumps({"mcp_servers": {"stub": _spec()}}), encoding="utf-8")
         self.engine = Engine(cwd=str(self.dir))
         self.ctx = self.engine.create_context()
@@ -142,7 +143,8 @@ class TestDynamicMcpTools(unittest.TestCase):
 
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(prefix="oh_test_"))
-        (self.dir / "settings.json").write_text(
+        (self.dir / ".oh").mkdir(exist_ok=True)
+        (self.dir / ".oh" / "settings.json").write_text(
             json.dumps({"mcp_servers": {"stub": _spec()}}), encoding="utf-8")
         self.engine = Engine(cwd=str(self.dir))
         self.ctx = self.engine.create_context()

@@ -56,9 +56,9 @@ _INDEX_LINE = re.compile(r"^- \[(?P<name>.+?)\]\((?P<link>.+?)\) — (?P<desc>.*
 
 
 class MemoryManager:
-    def __init__(self, cwd: Path):
+    def __init__(self, cwd: Path, subdir: str = "memory"):
         self.root = Path(cwd)
-        self.dir = self.root / "memory"
+        self.dir = self.root / subdir
         self.index = self.root / "MEMORY.md"
 
     # ---------- 创建 + 索引 ----------

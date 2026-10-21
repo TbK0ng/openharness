@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("prompt", nargs="*", help="首个用户请求（留空进入交互式）")
     p.add_argument("--cwd", default=None, help="工作目录（默认当前目录）")
-    p.add_argument("--config", default=None, help="settings.json 路径")
+    p.add_argument("--config", default=None, help="配置文件路径（默认 .oh/settings.json）")
     p.add_argument("--provider", default=None, choices=["lmstudio", "deepseek"],
                    help="LLM 供应商（默认取 settings.json，缺省 lmstudio）")
     p.add_argument("--model", default=None, help="覆盖模型名（如 deepseek-flash）")
@@ -160,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_banner:
         print(BANNER)
         print(f"工作目录: {engine.cwd}")
+        print(f"配置目录: {engine.oh_dir}")
         print(f"权限模式: {engine.permissions.mode}")
         print(f"已注册工具: {len(engine.registry.list_tools())}")
 

@@ -4,11 +4,19 @@ __pycache__/
 .venv/
 .uv-cache/
 
-# OpenHarness runtime state
+# OpenHarness 配置/运行时目录（全部状态集中在项目根的 .oh/）
+.oh/
+
+# 旧位置（保留忽略，便于从旧版本迁移）
 data/
 hook_log*
 *.log
 .openharness_worktrees/
+MEMORY.md
+memory/
+.tasks/
+settings.json
+plugins/
 
 # probe scratch & test runtime artifacts
 _probe/
