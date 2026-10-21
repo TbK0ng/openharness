@@ -78,6 +78,18 @@ async def run_query(context: Context) -> str:
             return response.text
 
         # 第 3 步：权限检查 + 执行工具，把结果回传给 LLM
+        # 协议要求：role=tool 的消息必须紧跟一条带 tool_calls 的 assistant 消息。
+        # DeepSeek 等严格的 OpenAI 兼容端点会以 400 拒绝缺少该前置消息的请求，
+        # 因此这里必须先把 LLM 的 tool_calls 回显进历史。
+        context.messages.append({
+            "role": "assistant",
+            "content": response.text or "",
+            "tool_calls": [
+                {"id": tc["id"], "name": tc["name"],
+                 "arguments": tc.get("arguments") or {}}
+                for tc in response.tool_calls
+            ],
+        })
         for tc in response.tool_calls:
             context.display(f"🔧 调用工具 {tc['name']}")
             result = await execute_tool_with_hooks(context, tc)

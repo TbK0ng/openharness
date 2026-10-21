@@ -25,6 +25,62 @@ DEFAULT_MODEL_CONFIG = {
     "max_retries": 2,
 }
 
+# 供应商预设（均走 OpenAI 兼容协议）。`api_key_env` 是读取密钥的环境变量；
+# 配置里的 `api_key` 优先级更高，留空时回退到环境变量。
+PROVIDERS = {
+    "lmstudio": {
+        "base_url": "http://127.0.0.1:1234/v1",
+        "api_key": "lm-studio",      # 本地端点不校验
+        "api_key_env": None,
+        "model": "",                 # 留空 -> 自动发现已加载模型
+        "discover": True,
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com",
+        "api_key": "",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "model": "deepseek-flash",
+        "discover": False,           # 云端模型名固定，不做发现
+    },
+}
+
+
+def resolve_provider(config: dict) -> dict:
+    """把平面配置解析成 build_llm 需要的完整参数。
+
+    优先级：显式配置 > 供应商预设 > DEFAULT_MODEL_CONFIG。
+    `base_url` / `api_key` / `model` 既可以写在顶层，也可以写在
+    嵌套的 `model` 字典里（兼容旧格式）。
+    """
+    nested = config.get("model") if isinstance(config.get("model"), dict) else {}
+    provider = config.get("provider") or "lmstudio"
+    preset = PROVIDERS.get(provider)
+    if preset is None:
+        known = ", ".join(sorted(PROVIDERS))
+        raise ValueError(f"未知 provider: {provider!r}（可选: {known}）")
+
+    merged = dict(DEFAULT_MODEL_CONFIG)
+    merged.update({k: v for k, v in preset.items() if k not in ("api_key_env", "discover")})
+    merged["provider"] = provider
+    merged["discover"] = preset.get("discover", False)
+    # 旧格式把参数放在嵌套的 model 字典里；此时顶层 model 必须清空，
+    # 否则会残留成 dict 并传给 ChatOpenAI。
+    if nested:
+        merged["model"] = ""
+
+    # 显式覆盖：顶层优先于嵌套；空串视为「未设置」，让预设生效。
+    # 顶层的 `model` 若仍是字典（旧格式），说明参数在嵌套层，不作覆盖。
+    for key in ("base_url", "api_key", "model", "temperature", "timeout", "max_retries"):
+        if nested.get(key) not in (None, ""):
+            merged[key] = nested[key]
+        top = config.get(key)
+        if top not in (None, "") and not (key == "model" and isinstance(top, dict)):
+            merged[key] = top
+
+    if not merged.get("api_key") and preset.get("api_key_env"):
+        merged["api_key"] = os.environ.get(preset["api_key_env"], "")
+    return merged
+
 
 def discover_model(base_url: str, api_key: str = "lm-studio", timeout: float = 5.0) -> str:
     """向 OpenAI 兼容端点查询当前（已加载的）模型 id。
@@ -82,23 +138,36 @@ class LLMResponse:
 
 
 def build_llm(config: dict) -> ChatOpenAI:
-    """构建 LangChain ChatOpenAI 客户端（指向本地 LM Studio 端点）。
+    """构建 LangChain ChatOpenAI 客户端。
+
+    支持 LM Studio（本地）与 DeepSeek（云端），两者都走 OpenAI 兼容协议；
+    由 `config["provider"]` 决定 base_url / 模型名 / 密钥来源。
 
     注意：timeout 必须传 httpx.Timeout（不可哈希），否则 langchain-openai
     会走 lru_cache 复用同一个底层 httpx 客户端，导致多实例共享/误关。
     """
     _sanitize_proxy_env()
-    m = dict(DEFAULT_MODEL_CONFIG)
-    m.update(config.get("model", {}))
-    # model 留空 → 查询端点当前加载的模型（LM Studio 单模型场景）
+    m = resolve_provider(config)
+
+    # 本地端点（LM Studio）模型名会随加载的模型变化，留空则自动发现。
     if not m.get("model"):
-        m["model"] = discover_model(m["base_url"], m.get("api_key", "lm-studio"))
+        if not m.get("discover"):
+            raise ValueError(
+                f"provider {m['provider']!r} 需要显式配置 model（例如 deepseek-flash）")
+        m["model"] = discover_model(m["base_url"], m.get("api_key") or "lm-studio")
+
+    if not m.get("api_key"):
+        env_name = PROVIDERS.get(m["provider"], {}).get("api_key_env")
+        hint = f"设置环境变量 {env_name} 或在 settings.json 里填写 api_key" if env_name \
+            else "在 settings.json 里填写 api_key"
+        raise ValueError(f"provider {m['provider']!r} 缺少 API key：{hint}")
+
     timeout = m.get("timeout", 300)
     if not isinstance(timeout, httpx.Timeout):
         timeout = httpx.Timeout(timeout)
     return ChatOpenAI(
         base_url=m["base_url"],
-        api_key=m.get("api_key", "lm-studio"),
+        api_key=m["api_key"],
         model=m["model"],
         temperature=m.get("temperature", 0.2),
         timeout=timeout,

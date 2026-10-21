@@ -68,11 +68,11 @@ def cron_due(schedule: str, now) -> bool:
 
 
 class CronManager:
-    def __init__(self, cwd: Path, tasks=None, context=None):
-        self.cwd = cwd
+    def __init__(self, cwd, tasks=None, context=None):
+        self.cwd = Path(cwd)
         self.tasks = tasks
         self.context = context  # 由 Engine 注入，供 agent 类型任务使用
-        self._file = cwd / "data" / "cron.json"
+        self._file = self.cwd / "data" / "cron.json"
         self._jobs: list[CronJob] = []
         self._counter = itertools.count(1)
         self._thread: Optional[threading.Thread] = None

@@ -251,6 +251,9 @@ async def execute_tool_with_hooks(context, tool_call: dict) -> ToolResult:
     tool = context.registry.get_tool(name)
     if tool is None:
         return ToolResult(error=f"未知工具: {name}")
+    errors = tool.validate(params)
+    if errors:
+        return ToolResult(error=f"参数校验失败: {'; '.join(errors)}")
     try:
         result = await tool.execute(params, context)
     except Exception as exc:

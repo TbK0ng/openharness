@@ -36,7 +36,7 @@ class CreateTaskTool(BaseTool):
 
     async def execute(self, params, context) -> ToolResult:
         board = _board(context)
-        task = board.create(params["subject"], params.get("description", ""),
+        task = board.create(params.get("subject", ""), params.get("description", ""),
                             params.get("blocked_by"))
         return ToolResult(output=f"Created task {task['id']}: {task['subject']}")
 
@@ -69,9 +69,9 @@ class GetTaskTool(BaseTool):
     async def execute(self, params, context) -> ToolResult:
         board = _board(context)
         try:
-            t = board.get(params["id"])
+            t = board.get(params.get("id", ""))
         except TaskNotFoundError:
-            return ToolResult(output=f"No such task: {params['id']}")
+            return ToolResult(output=f"No such task: {params.get("id", "")}")
         return ToolResult(output=(f"{t['id']}: {t['subject']}\n"
                                   f"status={t['status']} blockedBy={t['blockedBy']}"))
 
@@ -87,9 +87,9 @@ class ClaimTaskTool(BaseTool):
     async def execute(self, params, context) -> ToolResult:
         board = _board(context)
         try:
-            t = board.claim(params["id"])
+            t = board.claim(params.get("id", ""))
         except TaskNotFoundError:
-            return ToolResult(output=f"No such task: {params['id']}")
+            return ToolResult(output=f"No such task: {params.get("id", "")}")
         except TaskBlockedError as e:
             return ToolResult(output=f"Cannot claim: {e}")
         return ToolResult(output=f"Claimed {t['id']} (now in_progress)")
@@ -105,7 +105,7 @@ class CompleteTaskTool(BaseTool):
     async def execute(self, params, context) -> ToolResult:
         board = _board(context)
         try:
-            t = board.complete(params["id"])
+            t = board.complete(params.get("id", ""))
         except TaskNotFoundError:
-            return ToolResult(output=f"No such task: {params['id']}")
+            return ToolResult(output=f"No such task: {params.get("id", "")}")
         return ToolResult(output=f"Completed {t['id']}")

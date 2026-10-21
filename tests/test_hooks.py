@@ -82,6 +82,27 @@ class TestHookFlow(unittest.TestCase):
         self.assertTrue(result.is_error)
         self.assertIn("未知工具", result.error)
 
+    def test_missing_required_param_is_rejected_before_execute(self):
+        # Regression: BaseTool.validate() was never called by the pipeline, so an
+        # incomplete tool call reached execute() and surfaced a bare KeyError.
+        ctx, state = make_context(_tmp(), mode="full-auto")
+        tc = {"name": "Write", "arguments": {"file_path": "a.txt"}, "id": "c1"}
+
+        result = asyncio.run(execute_tool_with_hooks(ctx, tc))
+
+        self.assertTrue(result.is_error)
+        self.assertIn("参数校验失败", result.error)
+        self.assertIn("content", result.error)
+
+    def test_validation_lets_complete_calls_through(self):
+        ctx, state = make_context(_tmp(), mode="full-auto")
+        tc = {"name": "Write",
+              "arguments": {"file_path": "a.txt", "content": "hi"}, "id": "c1"}
+
+        result = asyncio.run(execute_tool_with_hooks(ctx, tc))
+
+        self.assertFalse(result.is_error)
+
     def test_session_start_hook_runs(self):
         hook_config = {"session_start": [{"type": "command", "command": "echo started"}]}
         ctx, state = make_context(_tmp(), hook_config=hook_config)

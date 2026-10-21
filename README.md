@@ -7,11 +7,32 @@ Agent Loop、三级权限护栏、MCP、技能、记忆、钩子、多 Agent 协
 
 ```bash
 uv sync                      # 安装依赖（httpx / langchain-core / langchain-openai）
-uv run pytest tests          # 144 个测试
+uv run pytest tests          # 195 个测试（190 passed + 5 需 LM Studio 的用例跳过）
 uv run python -m openharness.cli "列出当前目录的文件" --no-banner
 ```
 
 要求本机 LM Studio 在 `http://127.0.0.1:1234/v1` 提供服务（或其他 OpenAI 兼容端点）。
+
+## 模型供应商
+
+两套预设，都走 OpenAI 兼容协议，用 `provider` 切换：
+
+| provider | base_url | 默认模型 | 密钥来源 |
+|---|---|---|---|
+| `lmstudio`（默认） | `http://127.0.0.1:1234/v1` | 自动发现已加载模型 | 无需（本地端点不校验） |
+| `deepseek` | `https://api.deepseek.com` | `deepseek-flash` | `DEEPSEEK_API_KEY` 环境变量，或 settings.json 的 `api_key` |
+
+```bash
+# 云端
+export DEEPSEEK_API_KEY=sk-...            # Windows: setx DEEPSEEK_API_KEY sk-...
+uv run python -m openharness.cli "列出当前目录" --provider deepseek
+
+# 或写进 settings.json
+# {"provider": "deepseek", "model": "deepseek-v4-pro"}
+```
+
+优先级：显式配置（`--provider` / `--model` / settings.json）> provider 预设 > 内置默认值。
+空字符串视为「未设置」，因此 `"model": ""` 不会覆盖预设。
 
 ## CLI
 
@@ -45,6 +66,8 @@ provider / base_url / model / max_turns / permissions / hooks / mcp_servers / sk
 
 ## 验证记录
 
-- `uv run pytest tests`：144 passed
+- `uv run pytest tests`：190 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
 - 真实 LLM 冒烟：`uv run python -m openharness.cli "用 bash 工具列出当前目录的文件" --no-banner --max-turns 4`
   —— 模型自主调用 Glob/Read，权限询问正常弹出，回合上限生效。
+- Agent Loop 离线冒烟：用假 LLM 注入 ToolCall，验证「调用工具 → 结果回填 → 下一回合 → 返回文本」全链路。
+- 测试结束自动清理 `_tmp_tests/`、`tmp*/`、`oh_test_*/`、`oh_hooks_*/`（见 `conftest.py`）。

@@ -40,6 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("prompt", nargs="*", help="首个用户请求（留空进入交互式）")
     p.add_argument("--cwd", default=None, help="工作目录（默认当前目录）")
     p.add_argument("--config", default=None, help="settings.json 路径")
+    p.add_argument("--provider", default=None, choices=["lmstudio", "deepseek"],
+                   help="LLM 供应商（默认取 settings.json，缺省 lmstudio）")
+    p.add_argument("--model", default=None, help="覆盖模型名（如 deepseek-flash）")
     p.add_argument("--mode", default=None, choices=["default", "plan", "full-auto"],
                    help="权限模式（第 6 章三级护栏）")
     p.add_argument("--max-turns", type=int, default=None,
@@ -50,6 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _make_engine(args) -> Engine:
     engine = Engine(cwd=args.cwd, config_path=args.config)
+    if getattr(args, "provider", None):
+        engine.config["provider"] = args.provider
+    if getattr(args, "model", None):
+        engine.config["model"] = args.model
     if args.mode:
         engine.permissions.set_mode(args.mode)
     return engine

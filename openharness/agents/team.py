@@ -19,9 +19,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-# 只读工具白名单（explore / plan 子 Agent 可用）
+# 只读工具白名单（explore / plan 子 Agent 可用）。
+# 名称必须与 ToolRegistry 中真实注册的工具名一致；Read-only 的元工具
+# （TodoWrite/Compact/EnterPlanMode 等）会改动会话状态，不在此列。
 READONLY_TOOLS = {
-    "Read", "Glob", "Grep", "LS", "NotebookRead",
+    "Read", "Glob", "Grep", "WebFetch", "WebSearch",
+    "ListMcpResources", "ReadMcpResource",
 }
 
 # 子 Agent 系统提示（第 11 章）
