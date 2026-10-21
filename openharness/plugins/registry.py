@@ -8,25 +8,25 @@ plugins/ 目录下每个 .py 插件定义：
 from __future__ import annotations
 
 import importlib.util
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List
 
 
 @dataclass
 class PluginContext:
-    tools: list = None
-    commands: list = None
-    skills: list = None
+    tools: list = field(default_factory=list)
+    commands: list = field(default_factory=list)
+    skills: list = field(default_factory=list)
 
     def register_tool(self, tool) -> None:
-        (self.tools or []).append(tool)
+        self.tools.append(tool)
 
     def register_command(self, name: str, help_text: str, fn: Callable) -> None:
-        (self.commands or []).append((name, help_text, fn))
+        self.commands.append((name, help_text, fn))
 
     def register_skill(self, name: str, content: str) -> None:
-        (self.skills or []).append((name, content))
+        self.skills.append((name, content))
 
 
 class PluginRegistry:

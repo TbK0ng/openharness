@@ -60,6 +60,16 @@ class SkillLoader:
             for s in self._skills.values()
         ]
 
+    def add_runtime(self, name: str, content: str) -> None:
+        """注册运行时技能（插件通过 `ctx.register_skill` 提供，不落盘）。"""
+        first_line = content.strip().splitlines()[0] if content.strip() else ""
+        self._skills[name] = {
+            "name": name,
+            "description": first_line.lstrip("# ").strip(),
+            "path": None,
+            "content": content,
+        }
+
     def get(self, name: str) -> Optional[str]:
         s = self._skills.get(name)
         return s["content"] if s else None

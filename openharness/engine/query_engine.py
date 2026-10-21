@@ -103,8 +103,10 @@ class Engine:
         self.plugin_names = self.plugins.load_dir(plugin_dir, ctx)
         for tool in ctx.tools:
             self.registry.register(tool)
-        for name, fn in ctx.commands:
-            self.commands.register(name, fn)
+        for name, help_text, fn in ctx.commands:
+            self.commands.register(name, help_text, fn)
+        for name, content in ctx.skills:
+            self.skills.add_runtime(name, content)
 
     def _connect_mcp(self) -> None:
         if not self.config["mcp_servers"]:
