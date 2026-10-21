@@ -106,5 +106,55 @@ class TestTeamRegistry(unittest.TestCase):
         self.assertEqual(set(SUBAGENT_SYSTEM), set(SUBAGENT_TYPES))
 
 
+class TestMultiAgentTools(unittest.TestCase):
+    """Agent/SendMessage were the last tools without coverage."""
+
+    def _ctx(self):
+        engine = Engine(cwd=".")
+        ctx = engine.create_context()
+        ctx.permissions.set_mode("full-auto")
+        return ctx
+
+    def test_agent_spawns_and_returns_result(self):
+        import asyncio
+        from unittest import mock
+
+        import openharness.engine.llm as llm_mod
+        from openharness.engine.llm import LLMResponse
+        from openharness.tools.multi_agent import AgentTool
+
+        async def fake(context, max_tokens=None):
+            return LLMResponse(text="sub-done", stop_reason="end_turn", tool_calls=[])
+
+        ctx = self._ctx()
+        with mock.patch.object(llm_mod, "stream_response", fake):
+            result = asyncio.run(AgentTool().execute(
+                {"description": "d", "agent_type": "explore", "prompt": "p"}, ctx))
+
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.output, "sub-done")
+        self.assertEqual(len(ctx.team.list()), 1)
+
+    def test_send_message_to_unknown_agent_is_clean_error(self):
+        import asyncio
+        from openharness.tools.multi_agent import SendMessageTool
+
+        result = asyncio.run(SendMessageTool().execute(
+            {"agent_id": "agent-999", "message": "hi"}, self._ctx()))
+
+        self.assertTrue(result.is_error)
+        self.assertIn("no sub-agent", result.error)
+
+    def test_agent_rejects_unknown_agent_type(self):
+        import asyncio
+        from openharness.tools.multi_agent import AgentTool
+
+        result = asyncio.run(AgentTool().execute(
+            {"description": "d", "agent_type": "bogus", "prompt": "p"}, self._ctx()))
+
+        self.assertTrue(result.is_error)
+        self.assertIn("unknown agent_type", result.error)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -115,6 +115,13 @@ class Engine:
         if not self.config["mcp_servers"]:
             return
         self.mcp_status = self.mcp.connect_all()
+        self._register_mcp_tools()
+
+    def _register_mcp_tools(self) -> None:
+        """把已连接 server 的每个 tool 注册成原生工具（模型可直接调用）。"""
+        from ..tools.mcp_dynamic import mcp_tools_for
+        for tool in mcp_tools_for(self.mcp):
+            self.registry.register(tool)
 
     def _register_builtin_commands(self) -> None:
         """注册内置斜杠命令（第 3 章 Commands 子系统）。
@@ -224,7 +231,18 @@ class Engine:
     def _cmd_mcp(self, args: str) -> str:
         if not self.mcp_status:
             return "未配置 MCP 服务器（settings.json 的 mcp_servers）"
-        return "\n".join(f"{name}: {status}" for name, status in self.mcp_status.items())
+        dynamic = {t.name for t in self.registry.list_tools() if t.name.startswith("mcp__")}
+        lines = []
+        for name, status in self.mcp_status.items():
+            if status.get("ok"):
+                tools = ", ".join(status.get("tools") or []) or "(none)"
+                resources = ", ".join(status.get("resources") or []) or "(none)"
+                lines.append(f"{name}: connected | tools: {tools} | resources: {resources}")
+            else:
+                lines.append(f"{name}: FAILED — {status.get('error', 'unknown error')}")
+        if dynamic:
+            lines.append(f"原生工具 {len(dynamic)} 个：{', '.join(sorted(dynamic))}")
+        return "\n".join(lines)
 
     def _cmd_agents(self, args: str) -> str:
         agents = self.team.list()

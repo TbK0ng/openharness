@@ -25,7 +25,7 @@ class MCPTool(BaseTool):
         mgr = context.mcp
         if not mgr:
             return ToolResult(error="MCP manager not available.")
-        server = mgr.get_server(params["server"])
+        server = mgr.server(params["server"])
         if not server:
             return ToolResult(error=f"Unknown MCP server '{params['server']}'.")
         try:
@@ -46,7 +46,7 @@ class ListMcpResourcesTool(BaseTool):
         if not mgr:
             return ToolResult(output="No MCP servers connected.")
         lines = []
-        for name, server in mgr.servers().items():
+        for name, server in mgr.servers.items():
             try:
                 for r in server.list_resources():
                     lines.append(f"- [{name}] {r.get('uri', '?')}: {r.get('name', '')}")
@@ -70,7 +70,7 @@ class ReadMcpResourceTool(BaseTool):
 
     async def execute(self, params, context):
         mgr = context.mcp
-        server = mgr.get_server(params["server"]) if mgr else None
+        server = mgr.server(params["server"]) if mgr else None
         if not server:
             return ToolResult(error=f"Unknown MCP server '{params['server']}'.")
         try:

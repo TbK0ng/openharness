@@ -122,5 +122,50 @@ async def _fake_llm():
     return "SUMMARY"
 
 
+class TestCompactTool(unittest.TestCase):
+    """The Compact tool had no test; it calls compact_history through the tool layer."""
+
+    def _ctx(self):
+        ctx = mock.Mock()
+        ctx.messages = [{"role": "user", "content": f"m{i} " + "x" * 400} for i in range(20)]
+        ctx.compact_breaker = None
+        return ctx
+
+    def test_collapses_history_into_summary(self):
+        import openharness.engine.llm as llm_mod
+        from openharness.tools.meta_compact import CompactTool
+
+        ctx = self._ctx()
+
+        async def fake_complete(context, prompt):
+            return "SUMMARY-LINE"
+
+        with mock.patch.object(llm_mod, "llm_complete", fake_complete):
+            result = run(CompactTool().execute({}, ctx))
+
+        self.assertFalse(result.is_error)
+        self.assertLess(len(ctx.messages), len([1] * 20))
+        self.assertEqual(ctx.messages[0]["role"], "system")
+        self.assertIn("SUMMARY-LINE", ctx.messages[0]["content"])
+        self.assertIn("compacted", result.output)
+
+    def test_llm_failure_leaves_history_untouched(self):
+        import openharness.engine.llm as llm_mod
+        from openharness.tools.meta_compact import CompactTool
+
+        ctx = self._ctx()
+
+        async def boom(context, prompt):
+            raise RuntimeError("provider down")
+
+        before = list(ctx.messages)
+        with mock.patch.object(llm_mod, "llm_complete", boom):
+            run(CompactTool().execute({}, ctx))
+
+        # Failure must be a no-op, not partial corruption.
+        self.assertEqual(len(ctx.messages), len(before))
+        self.assertIs(ctx.compact_breaker.open(), ctx.compact_breaker.failures >= 3)
+
+
 if __name__ == "__main__":
     unittest.main()
