@@ -32,9 +32,9 @@ from .query import Context
 def default_config(cwd: Path) -> dict:
     return {
         "cwd": str(cwd),
-        # provider: lmstudio（本地 127.0.0.1:1234）| deepseek（云端）
+        # provider: deepseek（云端，默认）| lmstudio（本地 127.0.0.1:1234）
         # base_url / api_key / model 留空时按 provider 预设解析（见 engine/llm.py::PROVIDERS）
-        "provider": "lmstudio",
+        "provider": "deepseek",
         "base_url": "",
         "api_key": "",
         "model": "",

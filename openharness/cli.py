@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cwd", default=None, help="工作目录（默认当前目录）")
     p.add_argument("--config", default=None, help="配置文件路径（默认 .oh/settings.json）")
     p.add_argument("--provider", default=None, choices=["lmstudio", "deepseek"],
-                   help="LLM 供应商（默认取 settings.json，缺省 lmstudio）")
+                   help="LLM 供应商（默认取 settings.json，缺省 deepseek）")
     p.add_argument("--model", default=None, help="覆盖模型名（如 deepseek-flash）")
     p.add_argument("--mode", default=None, choices=["default", "plan", "full-auto"],
                    help="权限模式（第 6 章三级护栏）")

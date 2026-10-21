@@ -11,8 +11,15 @@ from openharness.engine.query_engine import default_config
 
 
 class TestProviderPresets(unittest.TestCase):
-    def test_lmstudio_defaults(self):
-        r = resolve_provider({})
+    def test_default_provider_is_deepseek(self):
+        with mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-env"}, clear=False):
+            r = resolve_provider({})
+        self.assertEqual(r["provider"], "deepseek")
+        self.assertEqual(r["base_url"], "https://api.deepseek.com")
+        self.assertEqual(r["model"], "deepseek-flash")
+
+    def test_lmstudio_preset_when_requested(self):
+        r = resolve_provider({"provider": "lmstudio"})
         self.assertEqual(r["provider"], "lmstudio")
         self.assertEqual(r["base_url"], "http://127.0.0.1:1234/v1")
         self.assertEqual(r["model"], "")
@@ -34,6 +41,17 @@ class TestProviderPresets(unittest.TestCase):
 
 
 class TestProviderOverrides(unittest.TestCase):
+    def test_default_config_ships_deepseek(self):
+        cfg = default_config(".")
+        self.assertEqual(cfg["provider"], "deepseek")
+        self.assertEqual(cfg["model"], "")   # 预设提供 deepseek-flash
+
+    def test_default_config_builds_deepseek_client(self):
+        cfg = default_config(".")
+        cfg["api_key"] = "sk-test"
+        llm = build_llm(cfg)
+        self.assertEqual(llm.model_name, "deepseek-flash")
+
     def test_explicit_api_key_beats_env(self):
         with mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-env"}, clear=False):
             r = resolve_provider({"provider": "deepseek", "api_key": "sk-explicit"})

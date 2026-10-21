@@ -53,7 +53,7 @@ def resolve_provider(config: dict) -> dict:
     嵌套的 `model` 字典里（兼容旧格式）。
     """
     nested = config.get("model") if isinstance(config.get("model"), dict) else {}
-    provider = config.get("provider") or "lmstudio"
+    provider = config.get("provider") or "deepseek"
     preset = PROVIDERS.get(provider)
     if preset is None:
         known = ", ".join(sorted(PROVIDERS))

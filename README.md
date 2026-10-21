@@ -11,7 +11,7 @@ uv run pytest tests          # 256 个测试（251 passed + 5 需 LM Studio 的�
 uv run python -m openharness.cli "列出当前目录的文件" --no-banner
 ```
 
-要求本机 LM Studio 在 `http://127.0.0.1:1234/v1` 提供服务（或其他 OpenAI 兼容端点）。
+默认使用 DeepSeek（需 `DEEPSEEK_API_KEY`）；也可切到本机 LM Studio（`--provider lmstudio`）。
 
 ## 模型供应商
 
@@ -19,16 +19,19 @@ uv run python -m openharness.cli "列出当前目录的文件" --no-banner
 
 | provider | base_url | 默认模型 | 密钥来源 |
 |---|---|---|---|
-| `lmstudio`（默认） | `http://127.0.0.1:1234/v1` | 自动发现已加载模型 | 无需（本地端点不校验） |
-| `deepseek` | `https://api.deepseek.com` | `deepseek-flash` | `DEEPSEEK_API_KEY` 环境变量，或 settings.json 的 `api_key` |
+| `deepseek`（默认） | `https://api.deepseek.com` | `deepseek-flash` | `DEEPSEEK_API_KEY` 环境变量，或 `.oh/settings.json` 的 `api_key` |
+| `lmstudio` | `http://127.0.0.1:1234/v1` | 自动发现已加载模型 | 无需（本地端点不校验） |
 
 ```bash
-# 云端
+# 默认即 DeepSeek，只需提供密钥
 export DEEPSEEK_API_KEY=sk-...            # Windows: setx DEEPSEEK_API_KEY sk-...
-uv run python -m openharness.cli "列出当前目录" --provider deepseek
+uv run python -m openharness.cli "列出当前目录"
 
-# 或写进 settings.json
-# {"provider": "deepseek", "model": "deepseek-v4-pro"}
+# 切回本地 LM Studio
+uv run python -m openharness.cli "列出当前目录" --provider lmstudio
+
+# 换模型
+uv run python -m openharness.cli "列出当前目录" --model deepseek-v4-pro
 ```
 
 优先级：显式配置（`--provider` / `--model` / settings.json）> provider 预设 > 内置默认值。
@@ -69,7 +72,7 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 
 | 模块 | 职责 |
 |---|---|
-| `engine/llm.py` | LM Studio 模型发现、LangChain ChatOpenAI 装配、消息转换 |
+| `engine/llm.py` | 供应商预设（DeepSeek / LM Studio）、LangChain ChatOpenAI 装配、消息转换 |
 | `engine/query.py` | Agent Loop：LLM → 工具调用 → 观察 → 再推理，回合上限控制 |
 | `engine/compact.py` | autoCompact（s08）：LLM 摘要 / 熔断器 / 紧急压缩 |
 | `engine/recovery.py` | 错误恢复（s11）：重试 / 指数退避 / Path 1 输出截断升级 / Path 3 备用模型切换 |
