@@ -13,13 +13,95 @@ from pathlib import Path
 
 from openharness.engine.query_engine import Engine
 from openharness.hooks.executor import execute_tool_with_hooks
-from openharness.mcp.client import MCPClientManager, MCPError, MCPServer
+from openharness.mcp.client import (
+    MCPClientManager,
+    MCPError,
+    MCPServer,
+    load_mcp_config,
+)
 
 STUB = str(Path(__file__).resolve().parent / "mcp_stub_server.py")
 
 
 def _spec() -> dict:
     return {"command": sys.executable, "args": [STUB]}
+
+
+class TestMcpConfigFile(unittest.TestCase):
+    """MCP servers are configured in .oh/mcp.json (Claude Code layout)."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="oh_test_"))
+        self.oh = self.dir / ".oh"
+        self.oh.mkdir()
+
+    def _write(self, payload):
+        (self.oh / "mcp.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_reads_mcp_servers_key(self):
+        self._write({"mcpServers": {"a": _spec()}})
+        self.assertEqual(load_mcp_config({}, self.oh), {"a": _spec()})
+
+    def test_accepts_bare_mapping_shorthand(self):
+        self._write({"a": _spec()})
+        self.assertEqual(load_mcp_config({}, self.oh), {"a": _spec()})
+
+    def test_missing_file_yields_empty(self):
+        self.assertEqual(load_mcp_config({}, self.oh), {})
+
+    def test_inline_settings_override_file(self):
+        self._write({"mcpServers": {"a": _spec(), "b": _spec()}})
+        merged = load_mcp_config({"mcp_servers": {"b": {"command": "other"}}}, self.oh)
+
+        self.assertEqual(merged["b"], {"command": "other"})
+        self.assertIn("a", merged)
+
+    def test_corrupt_file_raises_mcp_error(self):
+        (self.oh / "mcp.json").write_text("{nope", encoding="utf-8")
+        with self.assertRaises(MCPError):
+            load_mcp_config({}, self.oh)
+
+    def test_engine_connects_from_oh_mcp_json(self):
+        self._write({"mcpServers": {"stub": _spec()}})
+
+        engine = Engine(cwd=str(self.dir))
+        ctx = engine.create_context()
+
+        self.assertIn("stub", engine.mcp_status)
+        self.assertTrue(engine.mcp_status["stub"]["ok"])
+        self.assertIn("mcp__stub__echo",
+                      {t.name for t in engine.registry.list_tools()})
+        engine.mcp.close_all()
+
+    def test_mcp_connection_is_lazy(self):
+        self._write({"mcpServers": {"stub": _spec()}})
+
+        engine = Engine(cwd=str(self.dir))
+
+        self.assertFalse(engine._mcp_connected)
+        self.assertEqual(engine.mcp.servers, {})
+        engine.create_context()
+        self.assertTrue(engine._mcp_connected)
+        engine.mcp.close_all()
+
+    def test_relative_command_resolves_against_project_root(self):
+        # A relative `command` should resolve against the project root, so the
+        # process launches (the stub is a plain script, so it starts and fails
+        # the handshake — but the error must NOT be "file not found").
+        bin_dir = self.dir / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "srv.py").write_text(Path(STUB).read_text(encoding="utf-8"),
+                                        encoding="utf-8")
+        self._write({"mcpServers": {"rel": {"command": "bin/srv.py"}}})
+
+        manager = MCPClientManager({"mcp_servers": {}}, str(self.dir), oh_dir=self.oh)
+        status = manager.connect_all()
+        manager.close_all()
+
+        self.assertIn("rel", status)
+        error = status["rel"].get("error", "")
+        self.assertNotIn("No such file", error)
+        self.assertNotIn("WinError 2", error)
 
 
 class TestMCPServer(unittest.TestCase):

@@ -7,6 +7,7 @@ it; strict OpenAI-compatible ones (DeepSeek) reject the request with 400:
 'tool_calls'". These tests pin the protocol shape without needing a network.
 """
 import asyncio
+import tempfile
 import unittest
 
 import openharness.engine.llm as llm_mod
@@ -32,7 +33,7 @@ def _tool_call(name="TodoWrite", args=None, call_id="c1"):
 
 
 def _run(responses, max_turns=5):
-    engine = Engine(cwd=".")
+    engine = Engine(cwd=tempfile.mkdtemp(prefix="oh_test_"))
     ctx = engine.create_context()
     ctx.permissions.set_mode("full-auto")
     ctx.max_turns = max_turns

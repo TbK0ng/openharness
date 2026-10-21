@@ -3,21 +3,49 @@
 支持 initialize / tools/list / tools/call / resources/list / resources/read。
 每个服务器一个子进程 + 一行一个 JSON 的 JSON-RPC 2.0 通道，
 后台 reader 线程把响应行推入队列，_send 等待对应 id。
+
+配置来源（合并，后者覆盖同名项）：
+    1. `.oh/mcp.json`（推荐，Claude Code 兼容格式：`{"mcpServers": {...}}`）
+    2. settings.json 的 `mcp_servers` 键
 """
 from __future__ import annotations
 
 import json
 import os
 import subprocess
-import sys
 import threading
 import time
-import uuid
+from pathlib import Path
 from typing import Optional
 
 
 class MCPError(Exception):
     pass
+
+
+def load_mcp_config(config: dict, oh_dir: Path | str | None = None) -> dict:
+    """合并 .oh/mcp.json 与 settings.json 的 mcp_servers。
+
+    `.oh/mcp.json` 使用 Claude Code 的 `{"mcpServers": {...}}` 布局；
+    也接受直接给出服务器映射的简写形式。
+    """
+    servers: dict = {}
+
+    if oh_dir is not None:
+        path = Path(oh_dir) / "mcp.json"
+        if path.exists():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise MCPError(f"无法解析 {path}: {exc}") from exc
+            file_servers = raw.get("mcpServers", raw) if isinstance(raw, dict) else {}
+            if isinstance(file_servers, dict):
+                servers.update(file_servers)
+
+    inline = config.get("mcp_servers") or {}
+    if isinstance(inline, dict):
+        servers.update(inline)
+    return servers
 
 
 class MCPServer:
@@ -26,7 +54,7 @@ class MCPServer:
         self.spec = spec
         self.cwd = cwd
         self.proc: Optional[subprocess.Popen] = None
-        self._reader_q: "queue.Queue" = None
+        self._reader_q = None
         self._reader_thread: Optional[threading.Thread] = None
         self._next_id = 100
         self._tools: list = []
@@ -48,75 +76,13 @@ class MCPServer:
                 data = self._reader_q.get(timeout=0.5)
             except queue.Empty:
                 if self.proc.poll() is not None:
-                    raise MCPError(f"MCP server '{self.name}' exited during {method}")
+                    raise MCPError(
+                        f"MCP server '{self.name}' exited while waiting for {method}")
                 continue
             if isinstance(data, dict) and data.get("id") == req_id:
                 if "error" in data:
                     raise MCPError(f"MCP {method} error: {data['error']}")
                 return data.get("result", {})
-            # 其他 id / 通知 → 忽略
-
-    def list_tools(self) -> list:
-        return self._send("tools/list", {}).get("tools", [])
-
-    def list_resources(self) -> list:
-        try:
-            return self._send("resources/list", {}).get("resources", [])
-        except MCPError:
-            return []
-
-    def read_resource(self, uri: str) -> str:
-        result = self._send("resources/read", {"uri": uri})
-        contents = result.get("contents", [])
-        parts = []
-        for c in contents:
-            if c.get("text"):
-                parts.append(c["text"])
-            elif c.get("blob"):
-                parts.append(f"<binary {len(c['blob'])} bytes>")
-        return "\n".join(parts)
-
-    # ---- MCP 方法 -------------------------------------------------------
-    def initialize(self) -> None:
-        self._send(
-            "initialize",
-            {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "openharness", "version": "0.1.0"},
-            },
-        )
-        self._notify("notifications/initialized", {})
-
-    def list_tools(self) -> list:
-        result = self._send("tools/list", {})
-        self._tools = (result or {}).get("tools", [])
-        return self._tools
-
-    def call_tool(self, tool: str, arguments: dict) -> str:
-        result = self._send("tools/call", {"name": tool, "arguments": arguments})
-        if (result or {}).get("isError"):
-            raise MCPError(self._content_text(result))
-        return self._content_text(result)
-
-    def list_resources(self) -> list:
-        result = self._send("resources/list", {})
-        self._resources = (result or {}).get("resources", [])
-        return self._resources
-
-    def read_resource(self, uri: str) -> str:
-        result = self._send("resources/read", {"uri": uri})
-        return self._content_text(result)
-
-    @staticmethod
-    def _content_text(result: dict) -> str:
-        parts = []
-        for item in (result or {}).get("content", []):
-            if item.get("type") == "text":
-                parts.append(item.get("text", ""))
-            else:
-                parts.append(json.dumps(item, ensure_ascii=False))
-        return "\n".join(parts)
 
     # ---- 进程管理 -------------------------------------------------------
     def start(self) -> None:
@@ -124,6 +90,11 @@ class MCPServer:
         command = self.spec.get("command")
         if not command:
             raise MCPError(f"MCP server '{self.name}' has no command")
+        # 相对命令按项目根解析（.oh/mcp.json 里写 tools/xxx.exe 即可）
+        if not os.path.isabs(command) and (os.sep in command or "/" in command):
+            candidate = Path(self.cwd) / command
+            if candidate.exists():
+                command = str(candidate)
         args = list(self.spec.get("args", []))
         env = dict(os.environ)
         env.update(self.spec.get("env", {}))
@@ -149,6 +120,7 @@ class MCPServer:
                     self._reader_q.put(json.loads(line))
                 except json.JSONDecodeError:
                     continue
+
         self._reader_thread = threading.Thread(target=_reader, daemon=True)
         self._reader_thread.start()
         self.initialize()
@@ -184,79 +156,13 @@ class MCPServer:
             elif item.get("data") is not None:
                 parts.append(json.dumps(item["data"], ensure_ascii=False))
         if result.get("isError"):
-            return "[MCP error] " + "\n".join(parts)
+            raise MCPError(f"MCP tool '{name}' error: " + "\n".join(parts))
         return "\n".join(parts)
 
     def list_resources(self) -> list:
         try:
             result = self._send("resources/list", {})
             return result.get("resources", [])
-        except MCPError:
-            return []
-
-    def read_resource(self, uri: str) -> str:
-        result = self._send("resources/read", {"uri": uri})
-        parts = []
-        for item in result.get("contents", []):
-            if item.get("text"):
-                parts.append(item["text"])
-            elif item.get("blob"):
-                parts.append(f"<binary {len(item['blob'])} bytes>")
-        return "\n".join(parts)
-
-    def close(self) -> None:
-        if self.proc is not None:
-            try:
-                self.proc.stdin.close()
-            except Exception:
-                pass
-            try:
-                self.proc.wait(timeout=5)
-            except Exception:
-                self.proc.kill()
-            self.proc = None
-
-    # ---- JSON-RPC -------------------------------------------------------
-    def _send(self, method: str, params: dict, timeout: float = 30.0) -> dict:
-        import queue
-        req_id = self._next_id
-        self._next_id += 1
-        payload = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
-        assert self.proc is not None and self.proc.stdin is not None
-        self.proc.stdin.write(json.dumps(payload) + "\n")
-        self.proc.stdin.flush()
-        while True:
-            try:
-                msg = self._reader_q.get(timeout=timeout)
-            except queue.Empty:
-                raise MCPError(f"MCP server '{self.name}' timed out on {method}")
-            if isinstance(msg, dict) and msg.get("id") == req_id:
-                if "error" in msg:
-                    raise MCPError(f"MCP {method} error: {msg['error']}")
-                return msg.get("result", {})
-            # 服务器推送的通知（无 id）：忽略
-
-    # ---- 能力 -----------------------------------------------------------
-    def list_tools(self) -> list:
-        try:
-            return self._send("tools/list", {}).get("tools", [])
-        except MCPError:
-            return []
-
-    def call_tool(self, tool_name: str, arguments: dict) -> str:
-        result = self._send("tools/call", {"name": tool_name, "arguments": arguments})
-        parts = []
-        for item in result.get("content", []):
-            if isinstance(item, dict) and item.get("type") == "text":
-                parts.append(item.get("text", ""))
-        text = "\n".join(parts)
-        if result.get("isError"):
-            raise MCPError(f"MCP tool '{tool_name}' error: {text}")
-        return text
-
-    def list_resources(self) -> list:
-        try:
-            return self._send("resources/list", {}).get("resources", [])
         except MCPError:
             return []
 
@@ -271,12 +177,27 @@ class MCPServer:
                     parts.append(f"<binary blob, {len(item['blob'])} b64 chars>")
         return "\n".join(parts)
 
+    def close(self) -> None:
+        if self.proc is None:
+            return
+        try:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            self.proc = None
+
 
 class MCPClientManager:
-    """管理 settings.json 里配置的全部 MCP 服务器。"""
+    """管理 .oh/mcp.json 与 settings.json 里配置的全部 MCP 服务器。"""
 
-    def __init__(self, config: dict, cwd: str):
-        self.config = config.get("mcp_servers", {})
+    def __init__(self, config: dict, cwd: str, oh_dir: Path | str | None = None):
+        self.oh_dir = oh_dir
+        self.config = load_mcp_config(config, oh_dir)
         self.cwd = cwd
         self.servers: dict[str, MCPServer] = {}
 
@@ -293,7 +214,7 @@ class MCPClientManager:
                     "tools": [t.get("name") for t in server._tools],
                     "resources": [r.get("uri") for r in server._resources],
                 }
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 status[name] = {"ok": False, "error": str(e)}
                 server.close()
         return status

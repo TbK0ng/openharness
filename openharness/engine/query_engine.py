@@ -50,7 +50,8 @@ def default_config(cwd: Path) -> dict:
 
 
 class Engine:
-    def __init__(self, cwd: Optional[str] = None, config_path: Optional[str] = None):
+    def __init__(self, cwd: Optional[str] = None, config_path: Optional[str] = None,
+                 connect_mcp: Optional[bool] = None):
         self.cwd = Path(cwd or Path.cwd())
         self.oh_dir = ensure_oh_dir(self.cwd)
         self.config = self._load_config(config_path)
@@ -60,9 +61,9 @@ class Engine:
         self.hooks = HookManager(self.config)
         self.permissions = PermissionChecker(self.config["permissions"])
         self.team = TeamRegistry(engine=self)
-        self.tasks = TaskManager(self.cwd)
+        self.tasks = TaskManager(self.oh_dir, engine=self)
         self.cron = CronManager(self.oh_dir)
-        self.mcp = MCPClientManager(self.config, self.cwd)
+        self.mcp = MCPClientManager(self.config, self.cwd, oh_dir=self.oh_dir)
         self.registry = self._new_registry()
         self.commands = CommandRegistry()
         self.plugins = PluginRegistry()
@@ -70,7 +71,11 @@ class Engine:
         # 组装
         self._register_tools()
         self._load_plugins()
-        self._connect_mcp()
+        # MCP 连接会启动子进程（可能很慢）。默认懒连接：首次 create_context()
+        # 或显式调用 _connect_mcp() 时才连，避免每次 Engine() 都付启动代价。
+        self._mcp_connected = False
+        if connect_mcp is True:
+            self._connect_mcp()
         self._register_builtin_commands()
         self._sid: Optional[str] = None
         self._ctx: Optional[object] = None   # create_context() 后指向当前会话
@@ -129,10 +134,17 @@ class Engine:
             self.skills.add_runtime(name, content)
 
     def _connect_mcp(self) -> None:
-        if not self.config["mcp_servers"]:
+        if self._mcp_connected:
+            return
+        self._mcp_connected = True
+        if not self.mcp.config:
             return
         self.mcp_status = self.mcp.connect_all()
         self._register_mcp_tools()
+
+    def ensure_mcp(self) -> None:
+        """惰性连接 MCP（在需要工具清单/状态前调用）。"""
+        self._connect_mcp()
 
     def _register_mcp_tools(self) -> None:
         """把已连接 server 的每个 tool 注册成原生工具（模型可直接调用）。"""
@@ -161,6 +173,8 @@ class Engine:
 
     # ---- Context ----
     def create_context(self) -> Context:
+        # MCP 工具参与 tool_schemas，因此建上下文前先确保已连接
+        self.ensure_mcp()
         system_prompt = self._build_system_prompt()
         ctx = Context(
             session_id=self._session_id(),
@@ -248,8 +262,14 @@ class Engine:
         return f"已注册 {len(tools)} 个工具：\n" + "\n".join(lines)
 
     def _cmd_mcp(self, args: str) -> str:
+        self.ensure_mcp()
         if not self.mcp_status:
-            return "未配置 MCP 服务器（settings.json 的 mcp_servers）"
+            if self.mcp.config:
+                failed = "\n".join(f"{k}: {v.get('error', '?')}"
+                                    for k, v in self.mcp_status.items())
+                return failed or "已配置但未连接"
+            return (f"未配置 MCP 服务器。在 {self.oh_dir / 'mcp.json'} "
+                    "写入 {\"mcpServers\": {...}}，或在 settings.json 的 mcp_servers 里配置。")
         dynamic = {t.name for t in self.registry.list_tools() if t.name.startswith("mcp__")}
         lines = []
         for name, status in self.mcp_status.items():

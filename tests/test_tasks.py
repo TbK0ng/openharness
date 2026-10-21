@@ -115,5 +115,78 @@ class TestCommandTasks(unittest.TestCase):
         self.assertIn("[note] checkpoint", updated.output)
 
 
+class TestTaskPersistence(unittest.TestCase):
+    """Tasks are written to <root>/tasks/*.json so history survives restarts."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="oh_test_"))
+
+    def _script(self, body):
+        path = self.dir / "s.py"
+        path.write_text(body, encoding="utf-8")
+        return f'"{sys.executable}" "{path}"'
+
+    def test_task_file_written_per_task(self):
+        manager = TaskManager(str(self.dir))
+        task = _wait(manager.create_command("one", self._script("print('x')")))
+
+        path = self.dir / "tasks" / f"{task.task_id}.json"
+        self.assertTrue(path.exists())
+        self.assertEqual(path.parent.name, "tasks")
+
+    def test_history_survives_new_manager(self):
+        first = TaskManager(str(self.dir))
+        task = _wait(first.create_command("persisted", self._script("print('kept')")))
+
+        second = TaskManager(str(self.dir))
+
+        reloaded = second.get(task.task_id)
+        self.assertIsNotNone(reloaded)
+        self.assertEqual(reloaded.status, "finished")
+        self.assertIn("kept", reloaded.output)
+
+    def test_counter_does_not_collide_after_reload(self):
+        first = TaskManager(str(self.dir))
+        a = _wait(first.create_command("a", self._script("pass")))
+
+        second = TaskManager(str(self.dir))
+        b = _wait(second.create_command("b", self._script("pass")))
+
+        self.assertNotEqual(a.task_id, b.task_id)
+        self.assertEqual(len(second.list()), 2)
+
+    def test_running_task_from_dead_session_marked_interrupted(self):
+        first = TaskManager(str(self.dir))
+        # Simulate a task left "running" by a killed process.
+        task = Task("task-7", "command", "orphan", status="running", output="partial")
+        first.dir.mkdir(parents=True, exist_ok=True)
+        first._persist(task)
+
+        reloaded = TaskManager(str(self.dir)).get("task-7")
+
+        self.assertEqual(reloaded.status, "interrupted")
+        self.assertIn("partial", reloaded.output)
+
+    def test_output_capped_on_disk(self):
+        from openharness.tasks.manager import MAX_OUTPUT_CHARS
+
+        manager = TaskManager(str(self.dir))
+        task = Task("task-9", "command", "big", output="y" * (MAX_OUTPUT_CHARS + 5000))
+        manager.dir.mkdir(parents=True, exist_ok=True)
+        manager._persist(task)
+
+        import json
+        raw = json.loads((self.dir / "tasks" / "task-9.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(raw["output"]), MAX_OUTPUT_CHARS)
+
+    def test_corrupt_task_file_is_skipped(self):
+        (self.dir / "tasks").mkdir()
+        (self.dir / "tasks" / "task-1.json").write_text("{not json", encoding="utf-8")
+
+        manager = TaskManager(str(self.dir))
+
+        self.assertEqual(manager.list(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

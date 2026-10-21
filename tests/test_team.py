@@ -4,6 +4,7 @@ Regression coverage: READONLY_TOOLS listed `LS` and `NotebookRead`, neither of
 which is a registered tool, so the whitelist silently granted nothing extra and
 nothing caught the drift. The subsystem previously had no tests at all.
 """
+import tempfile
 import unittest
 
 from openharness.agents.team import (
@@ -20,7 +21,7 @@ from openharness.engine.query_engine import Engine
 def _context():
     # build_sub_context reads registry/cwd, so a real Context is the cheapest
     # faithful fixture; no LLM call happens during construction.
-    return Engine(cwd=".").create_context()
+    return Engine(cwd=tempfile.mkdtemp(prefix="oh_test_")).create_context()
 
 
 class TestReadonlyWhitelist(unittest.TestCase):
@@ -90,7 +91,7 @@ class TestTeamRegistry(unittest.TestCase):
         self.assertIsNone(TeamRegistry().get("agent-999"))
 
     def test_tools_for_matches_build_sub_context(self):
-        engine = Engine(cwd=".")
+        engine = Engine(cwd=tempfile.mkdtemp(prefix="oh_test_"))
         team = TeamRegistry(engine=engine)
         parent = engine.create_context()
 
@@ -110,7 +111,7 @@ class TestMultiAgentTools(unittest.TestCase):
     """Agent/SendMessage were the last tools without coverage."""
 
     def _ctx(self):
-        engine = Engine(cwd=".")
+        engine = Engine(cwd=tempfile.mkdtemp(prefix="oh_test_"))
         ctx = engine.create_context()
         ctx.permissions.set_mode("full-auto")
         return ctx

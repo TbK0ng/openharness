@@ -90,10 +90,11 @@ class TaskUpdateTool(BaseTool):
         task = context.tasks.get(params["task_id"])
         if not task:
             return ToolResult(error=f"No such task: {params['task_id']}")
-        if "description" in params:
-            task.description = params["description"]
-        if "status" in params:
-            task.status = params["status"]
+        task = context.tasks.update(
+            params["task_id"],
+            status=params.get("status"),
+            description=params.get("description"),
+        )
         return ToolResult(output=f"Updated {task.task_id}: {task.description} [{task.status}]")
 
 
