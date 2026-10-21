@@ -18,3 +18,7 @@ oh_test_*/
 tmp*/
 pytest-cache-files-*/
 .pytest_cache/
+
+# Local MCP server binary (installed via tools/codebase-memory-mcp/install.ps1)
+tools/codebase-memory-mcp/
+cbm_temp/
