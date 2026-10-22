@@ -160,29 +160,14 @@ class TestInitCommand(unittest.TestCase):
         self.assertIn("未覆盖", out)
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["max_turns"], 5)
 
-    def test_copies_example_when_present(self):
-        (self.root / "examples").mkdir()
-        (self.root / "examples" / "settings.example.json").write_text(
-            '{"max_turns": 42}', encoding="utf-8")
-
+    def test_writes_builtin_defaults(self):
         out = self.engine.commands.get("init").fn("")
 
         target = self.root / ".oh" / "settings.json"
-        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["max_turns"], 42)
-        self.assertIn("settings.example.json", out)
-
-    def test_missing_example_falls_back_to_defaults(self):
-        from openharness.paths import example_path
-
-        self.assertIsNone(example_path("settings.example.json", self.root))
-
-        out = self.engine.commands.get("init").fn("")
-
-        target = self.root / ".oh" / "settings.json"
-        self.assertTrue(target.exists())
         self.assertIn("默认配置", out)
-        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["provider"],
-                         "deepseek")
+        config = json.loads(target.read_text(encoding="utf-8"))
+        self.assertEqual(config["provider"], "deepseek")
+        self.assertIn("permissions", config)
 
 
 if __name__ == "__main__":

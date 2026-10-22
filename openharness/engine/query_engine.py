@@ -758,15 +758,10 @@ class Engine:
                          for a in agents)
 
     def _cmd_init(self, args: str) -> str:
-        """把 examples/settings.example.json 复制成 .oh/settings.json（不覆盖已有文件）。"""
+        """生成默认 .oh/settings.json（不覆盖已有文件）。"""
         target = self.oh_dir / "settings.json"
         if target.exists():
             return f"配置已存在，未覆盖：{target}"
-        from ..paths import example_path
-        example = example_path("settings.example.json", self.cwd)
-        if example is not None:
-            target.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
-            return f"已生成 {target}（来自 {example.name}）"
         target.write_text(json.dumps(default_config(self.cwd), indent=2,
                                      ensure_ascii=False) + "\n", encoding="utf-8")
         return f"已生成 {target}（默认配置）"

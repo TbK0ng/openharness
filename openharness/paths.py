@@ -45,13 +45,3 @@ def ensure_oh_dir(root: Path | str | None = None) -> Path:
 def oh_path(name: str, root: Path | str | None = None) -> Path:
     """配置目录下的子路径。"""
     return oh_dir(root) / name
-
-
-def example_path(name: str, workspace: Path | str | None = None) -> Path | None:
-    """查找 `<workspace>/examples/<name>`（未指定工作区时用当前目录）。
-
-    仓库不再分发示例文件；找不到时由调用方回退到内置默认配置。
-    """
-    base = Path(workspace) if workspace is not None else Path.cwd()
-    candidate = base / "examples" / name
-    return candidate if candidate.exists() else None

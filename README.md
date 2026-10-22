@@ -115,7 +115,7 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 
 ## 验证记录
 
-- `uv run pytest tests`：332 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
+- `uv run pytest tests`：331 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
 - 持久化/调度冒烟：跨进程 `/sessions` 载入会话、`MemorySave` 后新进程 `/memory` 可见、`*/1` cron 命令真实触发并写 `cron.log`。
 - 真实 LLM 冒烟：`uv run python -m openharness.cli "用 bash 工具列出当前目录的文件" --no-banner --max-turns 4`
   —— 模型自主调用 Glob/Read，权限询问正常弹出，回合上限生效。
