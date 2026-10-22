@@ -75,8 +75,8 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 └── mcp.json           # MCP 服务器（Claude Code 的 {"mcpServers": {...}} 格式）
 ```
 
-- 复制 `examples/settings.example.json` 为 `.oh/settings.json`，或在交互模式里执行 `/init` 自动生成。
-- MCP 服务器写在 `.oh/mcp.json`（参考 `examples/mcp.example.json`）；settings.json 的 `mcp_servers` 仍可用，同名项以 settings 为准。
+- 交互模式里执行 `/init` 生成默认的 `.oh/settings.json`；也可以手写 JSON。
+- MCP 服务器写在 `.oh/mcp.json`，格式为 `{"mcpServers": {...}}`；settings.json 的 `mcp_servers` 仍可用，同名项以 settings 为准。
 - `command` 写相对路径时按**项目根**解析，例如 `tools/codebase-memory-mcp/codebase-memory-mcp.exe`（`tools/` 为本机副本，不入库）。
 - 配置里的相对路径（`skills_dirs` / `memory_dir` / `plugins_dir`）一律以 `.oh/` 为根；绝对路径原样使用。
 - 目录名可用环境变量 `OH_DIR` 覆盖（例如测试隔离）。
@@ -88,24 +88,14 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 .
 ├── openharness/          # 框架源码
 ├── tests/                # 单元/集成测试
-├── examples/             # 配置模板（settings / mcp），/init 从这里复制
-├── lab/                  # 实验工作区：自带独立 .oh/，随便折腾
-├── docs/agents/          # 工程流程配置（issue tracker / triage / domain）
-├── .agents/skills/       # 给 omp 用的技能（开发本项目时用）
-├── .oh/                  # 被开发的 agent 的运行时配置（gitignored）
-└── README.md
+├── conftest.py           # pytest 配置
+├── pyproject.toml        # 打包与依赖
+├── uv.lock               # 锁定依赖
+├── README.md
+└── .gitignore
 ```
 
-### 实验用沙盒：`lab/`
-
-`lab/` 是一个自带 `.oh/` 的独立工作区，用来安全试用 Agent：
-
-```bash
-uv run python -m openharness.cli --cwd lab --mode full-auto "总结 lab/notes.md"
-```
-
-lab 里产生的记忆、任务、cron、worktree 都落在 `lab/.oh/`，不会污染项目根的 `.oh/`。
-`lab/` 入库，`lab/.oh/` 不入库。详见 `lab/README.md`。
+`.oh/` 是运行时状态目录，按需创建，不入库。
 
 ## 结构
 

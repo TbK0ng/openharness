@@ -47,17 +47,11 @@ def oh_path(name: str, root: Path | str | None = None) -> Path:
     return oh_dir(root) / name
 
 
-def package_root() -> Path:
-    """仓库根（openharness 包的父目录）；安装成 site-packages 时退回包目录。"""
-    return Path(__file__).resolve().parent.parent
-
-
 def example_path(name: str, workspace: Path | str | None = None) -> Path | None:
-    """查找随仓库分发的示例文件，优先给定的工作区，其次仓库根。"""
-    bases = ([Path(workspace)] if workspace is not None else []) + [package_root()]
-    for base in bases:
-        candidate = base / "examples" / name
-        if candidate.exists():
-            return candidate
-    fallback = Path.cwd() / "examples" / name
-    return fallback if fallback.exists() else None
+    """查找 `<workspace>/examples/<name>`（未指定工作区时用当前目录）。
+
+    仓库不再分发示例文件；找不到时由调用方回退到内置默认配置。
+    """
+    base = Path(workspace) if workspace is not None else Path.cwd()
+    candidate = base / "examples" / name
+    return candidate if candidate.exists() else None

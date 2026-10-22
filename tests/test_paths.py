@@ -171,11 +171,18 @@ class TestInitCommand(unittest.TestCase):
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["max_turns"], 42)
         self.assertIn("settings.example.json", out)
 
-    def test_falls_back_to_repo_examples(self):
-        # No local examples/ — the repo-level examples/ must still be found.
+    def test_missing_example_falls_back_to_defaults(self):
         from openharness.paths import example_path
 
-        self.assertIsNotNone(example_path("settings.example.json"))
+        self.assertIsNone(example_path("settings.example.json", self.root))
+
+        out = self.engine.commands.get("init").fn("")
+
+        target = self.root / ".oh" / "settings.json"
+        self.assertTrue(target.exists())
+        self.assertIn("默认配置", out)
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["provider"],
+                         "deepseek")
 
 
 if __name__ == "__main__":

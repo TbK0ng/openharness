@@ -6,8 +6,14 @@ __pycache__/
 
 # OpenHarness 配置/运行时目录（全部状态集中在工作区的 .oh/）
 .oh/
-# lab 是入库的沙盒，但它自己的运行态不入库
-lab/.oh/
+
+# 本地实验/示例与 omp 开发工具：不属于发布项目本体
+/lab/
+/examples/
+/.agents/
+/AGENTS.md
+/skills-lock.json
+/docs/agents/
 
 # 旧位置（保留忽略，便于从旧版本迁移）。
 # 注意锚定到根目录：`memory/` 会误伤 openharness/memory/ 包目录。
