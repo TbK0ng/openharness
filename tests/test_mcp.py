@@ -73,6 +73,20 @@ class TestMcpConfigFile(unittest.TestCase):
                       {t.name for t in engine.registry.list_tools()})
         engine.mcp.close_all()
 
+    def test_engine_close_terminates_mcp_children(self):
+        """Engine.close() 必须带走 MCP 子进程，否则退出后残留会撞锁。"""
+        self._write({"mcpServers": {"stub": _spec()}})
+        engine = Engine(cwd=str(self.dir))
+        engine.ensure_mcp()
+        procs = [s.proc for s in engine.mcp.servers.values()]
+        self.assertTrue(procs, "stub server 应当已启动")
+
+        engine.close()
+
+        self.assertEqual(engine.mcp.servers, {})
+        self.assertTrue(all(p.poll() is not None for p in procs),
+                        "子进程应在 close() 后退出")
+
     def test_mcp_connection_is_lazy(self):
         self._write({"mcpServers": {"stub": _spec()}})
 

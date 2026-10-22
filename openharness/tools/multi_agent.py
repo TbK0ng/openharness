@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 from .base import BaseTool, ToolResult
-from ..agents.team import SUBAGENT_TYPES, SubTask
+from ..agents.team import SUBAGENT_TYPES
 
 
 class AgentTool(BaseTool):
     name = "Agent"
     description = (
         "Spawn a sub-agent with an independent context to do focused work "
-        "(research, implementation, review). Returns its final answer."
+        "(research, implementation, review). Returns its final answer followed "
+        "by [agent_id: ...] — pass that id to SendMessage to continue the thread."
     )
     read_only = False
     input_schema = {
@@ -37,7 +38,9 @@ class AgentTool(BaseTool):
         if bg:
             return ToolResult(output=f"started background agent {agent.agent_id} ({agent_type})")
         result = team.run(agent, prompt)
-        return ToolResult(output=result or "(sub-agent returned no output)")
+        body = result or "(sub-agent returned no output)"
+        # 把 id 一起返回：否则调用方拿不到句柄，SendMessage 永远用不上。
+        return ToolResult(output=f"{body}\n\n[agent_id: {agent.agent_id}]")
 
 
 class SendMessageTool(BaseTool):
@@ -58,10 +61,8 @@ class SendMessageTool(BaseTool):
         agent = team.get(params.get("agent_id", ""))
         if agent is None:
             return ToolResult(error=f"no sub-agent with id {params.get('agent_id')}")
-        if agent.context is None:
-            return ToolResult(error=f"agent {agent.agent_id} has no active context yet")
-        from ..engine.query import run_query_in_thread
-        agent.context.messages.append({"role": "user", "content": params.get("message", "")})
-        result = run_query_in_thread(agent.context)
-        agent.result = result
+        try:
+            result = team.resume(agent, params.get("message", ""))
+        except ValueError as exc:
+            return ToolResult(error=str(exc))
         return ToolResult(output=result or "(sub-agent returned no output)")

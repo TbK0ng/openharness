@@ -132,7 +132,8 @@ def _switch_fallback(context, st: RecoveryState) -> None:
     fallback = (context.config or {}).get("fallback_model")
     if fallback and st.current_model != fallback:
         st.current_model = fallback
-        context.on_text(f"[recovery] 连续瞬时故障，切换备用模型 {fallback}")
+        # 走 on_event（过程提示）：on_text 是正文流，CLI 没接，用户会看不到
+        context.on_event(f"[recovery] 连续瞬时故障，切换备用模型 {fallback}")
 
 
 async def _backoff(attempt: int, context) -> None:

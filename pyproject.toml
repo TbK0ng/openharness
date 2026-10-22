@@ -23,6 +23,8 @@ openharness = "openharness.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=9.0",
+    # e2e 用真实 ConPTY 驱动交互终端（Tab/↑/Esc/审批弹窗）
+    "pywinpty>=3.1; sys_platform == 'win32'",
 ]
 
 [build-system]

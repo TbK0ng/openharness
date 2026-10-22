@@ -53,6 +53,8 @@ class MCPServer:
         self.name = name
         self.spec = spec
         self.cwd = cwd
+        # 每个 server 可以单独放宽握手超时（重二进制冷启动很慢）
+        self.timeout = float(spec.get("timeout") or 30.0)
         self.proc: Optional[subprocess.Popen] = None
         self._reader_q = None
         self._reader_thread: Optional[threading.Thread] = None
@@ -61,8 +63,11 @@ class MCPServer:
         self._resources: list = []
 
     # ---- JSON-RPC -------------------------------------------------------
-    def _send(self, method: str, params: dict, timeout: float = 30.0) -> dict:
+    def _send(self, method: str, params: dict,
+              timeout: float | None = None) -> dict:
         import queue
+        if timeout is None:
+            timeout = self.timeout
         req_id = self._next_id
         self._next_id += 1
         msg = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}

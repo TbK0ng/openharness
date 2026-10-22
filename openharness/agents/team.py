@@ -87,7 +87,7 @@ def build_sub_context(parent, task: SubTask):
         system_prompt=SUBAGENT_SYSTEM.get(
             task.agent_type, SUBAGENT_SYSTEM["general-purpose"]),
         tool_schemas=[t.to_json_schema() for t in tools],
-        llm=parent.llm,
+        llm=None,            # 子 Agent 在自己的事件循环里自建客户端
         registry=reg,
         permissions=parent.permissions,
         hooks=parent.hooks,
@@ -104,17 +104,22 @@ def build_sub_context(parent, task: SubTask):
 
 def _run_subagent_thread(agent: SubAgent, ctx) -> None:
     """线程内跑子 Agent 的 Agent Loop（新建事件循环）。"""
+    from ..engine.llm import build_llm
     from ..engine.query import run_query_in_thread
     agent.status = "running"
     if agent.on_event is not None:
         ctx.on_event = agent.on_event
     try:
-        agent.result = run_query_in_thread(ctx)
+        # 子 Agent 在新线程的新事件循环里跑，必须自建 LLM 客户端：
+        # 父会话的 httpx 客户端绑定在另一个循环上，跨循环复用会永久阻塞。
+        ctx.llm = build_llm(ctx.config)
+        agent.result = run_query_in_thread(ctx, close_llm_after=True)
         agent.status = "done"
     except Exception as e:  # noqa: BLE001
         agent.status = "error"
         agent.result = f"subagent error: {e}"
     finally:
+        ctx.llm = None
         agent.context = ctx
 
 
@@ -201,6 +206,14 @@ class TeamRegistry:
             target=_run_subagent_thread, args=(agent, ctx), daemon=True)
         agent.thread.start()
         return f"Started background agent {agent.agent_id}."
+
+    def resume(self, agent: SubAgent, message: str) -> str:
+        """给已有子 Agent 追加一条消息并等它跑完（SendMessage 用）。"""
+        if agent.context is None:
+            raise ValueError(f"agent {agent.agent_id} has no active context yet")
+        agent.context.messages.append({"role": "user", "content": message})
+        _run_subagent_thread(agent, agent.context)
+        return agent.result or ""
 
 
 def run_pipeline(context, prompts: list[str]) -> list[str]:

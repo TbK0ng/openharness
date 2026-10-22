@@ -116,3 +116,32 @@ def test_endpoint_reachable():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_assistant_message_without_tool_calls_maps_cleanly():
+    """多轮会话回归：没有 tool_calls 的 assistant 消息不能带 tool_calls=None。
+
+    langchain-core 1.x 的 AIMessage 用 pydantic 校验该字段，None 会被拒绝，
+    结果是用户在第二句话时直接收到 ValidationError。
+    """
+    from langchain_core.messages import AIMessage
+
+    from openharness.engine.llm import to_langchain_messages
+
+    out = to_langchain_messages([{"role": "assistant", "content": "hi"}])
+    assert isinstance(out[0], AIMessage)
+    assert out[0].tool_calls == []
+    assert out[0].content == "hi"
+
+
+def test_assistant_tool_call_and_tool_result_mapping():
+    from openharness.engine.llm import to_langchain_messages
+
+    out = to_langchain_messages([
+        {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "call_1", "name": "Read", "arguments": {"file_path": "a.txt"}}]},
+        {"role": "tool", "tool_call_id": "call_1", "name": "Read", "content": "x"},
+    ])
+    assert out[0].tool_calls[0]["name"] == "Read"
+    assert out[0].tool_calls[0]["args"] == {"file_path": "a.txt"}
+    assert out[1].tool_call_id == "call_1"

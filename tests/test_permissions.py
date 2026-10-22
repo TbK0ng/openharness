@@ -29,6 +29,26 @@ class TestDefaultMode(unittest.TestCase):
         d = self.ctx.permissions.check("Write", {"file_path": "C:/x/secrets/key.txt", "content": "b"}, self.ctx)
         self.assertEqual(d.verdict, DENY)
 
+    def test_path_rule_matches_absolute_form_of_relative_rule(self):
+        """相对规则也必须拦住绝对路径写法，否则换个写法就能绕过。"""
+        import os
+
+        self.ctx.permissions.add_path_rule("secret/*")
+        abs_path = os.path.join(self.tmp, "secret", "key.txt")
+        d = self.ctx.permissions.check(
+            "Write", {"file_path": abs_path, "content": "b"}, self.ctx)
+        self.assertEqual(d.verdict, DENY)
+
+    def test_path_rule_leaves_other_paths_alone(self):
+        import os
+
+        self.ctx.permissions.mode = "full-auto"
+        self.ctx.permissions.add_path_rule("secret/*")
+        d = self.ctx.permissions.check(
+            "Write", {"file_path": os.path.join(self.tmp, "public.txt"), "content": "b"},
+            self.ctx)
+        self.assertEqual(d.verdict, ALLOW)
+
     def test_command_rule_denies(self):
         self.ctx.permissions.add_command_rule(r"rm\s+-rf")
         d = self.ctx.permissions.check("Bash", {"command": "rm -rf /tmp/x"}, self.ctx)

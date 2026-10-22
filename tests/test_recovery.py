@@ -25,6 +25,8 @@ class _Ctx:
         self.config = config or {"retry_base_delay": 0.0}
         self.recovery_state = None
         self.on_text = lambda t: None
+        # 真实的 Context 同时有 on_event（过程事件，CLI 接的是它）
+        self.on_event = lambda t: None
 
 
 class TestClassifiers(unittest.TestCase):

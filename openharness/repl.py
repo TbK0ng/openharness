@@ -126,7 +126,13 @@ class SlashCommandCompleter(Completer):  # type: ignore[misc]
 
 def _status_text(engine) -> str:
     cfg = engine.config
-    model = cfg.get("model") or cfg.get("provider") or "?"
+    # 显示真正会用的模型名（provider 预设也算），而不是空字符串退回 provider
+    try:
+        from .engine.llm import resolve_provider
+
+        model = resolve_provider(cfg).get("model") or cfg.get("provider") or "?"
+    except Exception:  # noqa: BLE001 - 状态栏不允许影响输入
+        model = cfg.get("model") or cfg.get("provider") or "?"
     try:
         tools = len(engine.registry.list_tools())
     except Exception:  # noqa: BLE001 - 状态栏不允许影响输入

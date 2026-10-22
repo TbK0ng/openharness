@@ -133,7 +133,8 @@ class TestMultiAgentTools(unittest.TestCase):
                 {"description": "d", "agent_type": "explore", "prompt": "p"}, ctx))
 
         self.assertFalse(result.is_error)
-        self.assertEqual(result.output, "sub-done")
+        self.assertTrue(result.output.startswith("sub-done"))
+        self.assertIn("[agent_id: agent-1]", result.output)
         self.assertEqual(len(ctx.team.list()), 1)
 
     def test_send_message_to_unknown_agent_is_clean_error(self):

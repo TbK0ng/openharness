@@ -53,7 +53,7 @@ def default_config(cwd: Path) -> dict:
     }
 
 
-def _is_tty() -> bool:
+def is_tty() -> bool:
     """命令内部是否可以直接读 stdin（终端菜单）；管道/测试环境返回 False。"""
     try:
         return bool(sys.stdin.isatty() and sys.stdout.isatty())
@@ -290,6 +290,21 @@ class Engine:
         self._activate(session)
         return session
 
+    def close(self) -> None:
+        """进程退出前的收尾：停调度线程、结束 MCP 子进程。
+
+        不做这一步，MCP server 进程会留在后台（Windows 下父进程退出不带走子进程），
+        下次启动可能因为锁竞争直接握手失败。
+        """
+        try:
+            self.cron.stop()
+        except Exception:  # noqa: BLE001 - 收尾不允许抛
+            pass
+        try:
+            self.mcp.close_all()
+        except Exception:  # noqa: BLE001
+            pass
+
     def start_background(self) -> None:
         """启动常驻后台调度（cron）。CLI 在进入主循环前调用。"""
         if self.session is None and any(
@@ -472,7 +487,7 @@ class Engine:
             return f"权限模式 -> {self.permissions.mode}（/permission save 可持久化）"
 
         # 不带参数：终端下直接给一个编号菜单，非交互环境只列选项。
-        if _is_tty():
+        if is_tty():
             menu = (f"\n当前权限模式: {self.permissions.mode}\n"
                     + "\n".join(f"  [{i}] {name:<10} {desc}"
                                 for i, (name, desc) in enumerate(choices.items(), 1))
@@ -732,9 +747,7 @@ class Engine:
         self.ensure_mcp()
         if not self.mcp_status:
             if self.mcp.config:
-                failed = "\n".join(f"{k}: {v.get('error', '?')}"
-                                    for k, v in self.mcp_status.items())
-                return failed or "已配置但未连接"
+                return "已配置但未连接（用 /mcp 重试，或检查 server 可执行文件路径）"
             return (f"未配置 MCP 服务器。在 {self.oh_dir / 'mcp.json'} "
                     "写入 {\"mcpServers\": {...}}，或在 settings.json 的 mcp_servers 里配置。")
         dynamic = {t.name for t in self.registry.list_tools() if t.name.startswith("mcp__")}

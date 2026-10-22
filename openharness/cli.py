@@ -4,7 +4,7 @@
 
 用法：
     python -m openharness.cli                 # 交互式会话
-    python -m openharness.cli "读一下 a.py"    # 单次请求后继续交互
+    python -m openharness.cli "读一下 a.py"    # 单次请求；终端下跑完继续交互，管道下退出
     python -m openharness.cli --mode plan      # 指定权限模式启动
     python -m openharness.cli --cwd ./myproj   # 指定工作目录
 
@@ -24,8 +24,8 @@ import sys
 from pathlib import Path
 
 from .engine.query import run_query_sync
-from .engine.query_engine import Engine
-from .repl import LineReader, RewindRequest
+from .engine.query_engine import Engine, is_tty
+from .repl import LineReader, RewindRequest, wants_repl
 
 
 BANNER = """\
@@ -97,13 +97,25 @@ def _interactive_ask(prompt: str) -> str:
     返回值：y = 允许一次，a = 本会话始终允许该工具，其他 = 拒绝。
     """
     try:
-        return input(f"\n🔐 {prompt}\n选择 [y/a/N]: ").strip()
+        # 待审批的内容已经由 execute_tool_with_hooks 打印过，这里只要输入行
+        return input("选择 [y/a/N]: ").strip()
     except (EOFError, KeyboardInterrupt):
         return ""
 
 
+def _deny_ask(prompt: str) -> str:
+    """非交互环境（管道 / CI）的审批回调。
+
+    待审批的操作已经由 `execute_tool_with_hooks` 通过 on_event 打印过一次，
+    这里只补一句「为什么被拒」和补救办法。
+    """
+    _emit("（非交互环境无法审批，已按拒绝处理；可加 --mode full-auto "
+          "或用 /permission allow <工具>）")
+    return ""
+
+
 def run_once(engine: Engine, prompt: str, max_turns: int | None,
-             interactive: bool = False) -> str:
+             ask_user=None) -> str:
     """跑一轮完整的 Agent Loop（第 12 章第 3–8 步）。
 
     复用当前会话的 Context（多轮历史、todo、恢复状态），只在每轮刷新
@@ -112,8 +124,7 @@ def run_once(engine: Engine, prompt: str, max_turns: int | None,
     ctx = engine.begin_turn()
     if max_turns:
         ctx.max_turns = max_turns
-    if interactive:
-        ctx.ask_user = _interactive_ask
+    ctx.ask_user = ask_user or _deny_ask
     ctx.messages.append({"role": "user", "content": prompt})
     ctx.on_event = _emit
     try:
@@ -169,10 +180,16 @@ def interactive(engine: Engine, max_turns: int | None) -> int:
                 print("再见 👋")
                 return 0
             if line.startswith("/"):
-                _handle_command(engine, line)
+                try:
+                    _handle_command(engine, line)
+                except SystemExit:
+                    print("\n再见 👋")
+                    return 0
                 continue
             try:
-                _print_assistant(run_once(engine, line, max_turns, interactive=True))
+                _print_assistant(run_once(
+                    engine, line, max_turns,
+                    ask_user=_interactive_ask if is_tty() else _deny_ask))
             except KeyboardInterrupt:
                 print("\n(已中断当前请求)")
             except SystemExit:
@@ -191,6 +208,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Engine 初始化失败: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
 
+    try:
+        return _run(engine, args)
+    finally:
+        engine.close()
+
+
+def _run(engine: Engine, args) -> int:
     engine.start_background()   # cron 后台调度（仅在本进程运行期间触发）
 
     if not args.no_banner:
@@ -204,14 +228,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.prompt:
         text = " ".join(args.prompt)
+        # 只有真实终端才值得跑完继续交互；管道/CI 下跑完必须退出，否则挂住
+        repl = wants_repl()
         try:
-            _print_assistant(run_once(engine, text, args.max_turns))
+            _print_assistant(run_once(engine, text, args.max_turns,
+                                      ask_user=_interactive_ask if is_tty() else None))
         except KeyboardInterrupt:
             print("\n(已中断)")
             return 130
         except Exception as e:  # noqa: BLE001
             print(f"⚠️  请求失败: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
+        if not repl:
+            return 0
 
     return interactive(engine, args.max_turns)
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -70,15 +71,30 @@ class PermissionChecker:
         self._command_regexes.append(re.compile(pattern))
 
     # ---- 路径/命令的细粒度规则 -----------------------------------------
-    def _check_path_rules(self, params: dict) -> Optional[str]:
+    def _check_path_rules(self, params: dict, cwd: str | None = None) -> Optional[str]:
         for key in PATH_PARAMS:
-            path = params.get(key)
-            if not path:
+            raw = params.get(key)
+            if not raw:
                 continue
-            norm = str(path).replace("\\", "/")
+            # 同一条规则要同时拦住相对写法和绝对写法，否则换个写法就绕过去了
+            candidates = {str(raw).replace("\\", "/")}
+            try:
+                p = Path(str(raw))
+                if cwd and not p.is_absolute():
+                    p = Path(cwd) / p
+                if cwd:
+                    try:
+                        candidates.add(
+                            p.resolve().relative_to(Path(cwd).resolve()).as_posix())
+                    except (ValueError, OSError):
+                        pass
+                candidates.add(p.as_posix())
+            except (OSError, ValueError):
+                pass
             for rule in self.deny_paths:
-                if fnmatch.fnmatch(norm, rule) or fnmatch.fnmatch(norm, rule.replace("\\", "/")):
-                    return f"path '{path}' matches deny rule '{rule}'"
+                norm_rule = rule.replace("\\", "/")
+                if any(fnmatch.fnmatch(c, norm_rule) for c in candidates):
+                    return f"path '{raw}' matches deny rule '{rule}'"
         return None
 
     def _check_command_rules(self, params: dict) -> Optional[str]:
@@ -97,7 +113,7 @@ class PermissionChecker:
             return PermissionDecision(DENY, reason=f"tool '{tool_name}' is in the denied tools list")
 
         # 第 2 步：检查路径规则
-        path_violation = self._check_path_rules(params)
+        path_violation = self._check_path_rules(params, getattr(context, "cwd", None))
         if path_violation:
             return PermissionDecision(DENY, reason=path_violation)
 

@@ -78,7 +78,7 @@ class TestSlashCommands(unittest.TestCase):
         self.assertIn("/mode <模式>", out)
 
     def test_mode_menu_number_switches_mode(self):
-        with mock.patch("openharness.engine.query_engine._is_tty",
+        with mock.patch("openharness.engine.query_engine.is_tty",
                         return_value=True), \
              mock.patch("builtins.input", return_value="2"):
             out = self.engine.commands.get("mode").fn("")
@@ -86,7 +86,7 @@ class TestSlashCommands(unittest.TestCase):
         self.assertEqual(self.engine.permissions.mode, "plan")
 
     def test_mode_menu_cancel_keeps_mode(self):
-        with mock.patch("openharness.engine.query_engine._is_tty",
+        with mock.patch("openharness.engine.query_engine.is_tty",
                         return_value=True), \
              mock.patch("builtins.input", return_value=""):
             out = self.engine.commands.get("mode").fn("")
@@ -207,11 +207,11 @@ class TestAskUserWiring(unittest.TestCase):
         with mock.patch.object(self.engine, "create_context",
                                return_value=self._ctx_stub()) as cc, \
              mock.patch("openharness.cli.run_query_sync", return_value="ok"):
-            run_once(self.engine, "hi", None, interactive=True)
+            run_once(self.engine, "hi", None, ask_user=_interactive_ask)
         ctx = cc.return_value
         self.assertIs(ctx.ask_user, _interactive_ask)
 
-    def test_one_shot_keeps_default_silent_ask(self):
+    def test_one_shot_defaults_to_non_interactive_deny(self):
         with mock.patch.object(self.engine, "create_context",
                                return_value=self._ctx_stub()) as cc, \
              mock.patch("openharness.cli.run_query_sync", return_value="ok"):

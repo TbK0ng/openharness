@@ -53,6 +53,9 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 - 权限：`/permission allow <工具>` 或审批时输入 `a`，该工具在本会话内不再询问；`/permission save` 把模式与 allow/deny 列表写入 `.oh/settings.json`，下次启动继续生效。plan 模式仍会阻止所有写操作（白名单不能绕过）。
 - 管道、CI 或 `OPENHARNESS_PLAIN_INPUT=1` 时自动退回 `input()`（此时双击 Esc 不可用，用 `/rewind`）。
 - 权限询问走真实 stdin（`ask_user`），非交互环境默认拒绝。
+- 一次性 prompt 的收尾：**真实终端**跑完继续交互（可接着聊）；**管道/CI** 跑完即退出，脚本不会挂住。
+- 非交互环境没有审批入口，写操作会被拒绝并打印「非交互环境无法审批」+ 补救办法；
+  自动化请改用 `--mode full-auto` 或 `/permission allow <工具>`。
 
 ## 配置目录：`.oh/`
 
@@ -77,6 +80,7 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 
 - 交互模式里执行 `/init` 生成默认的 `.oh/settings.json`；也可以手写 JSON。
 - MCP 服务器写在 `.oh/mcp.json`，格式为 `{"mcpServers": {...}}`；settings.json 的 `mcp_servers` 仍可用，同名项以 settings 为准。
+- 每个 server 可以加 `"timeout": 120` 放宽握手超时（默认 30 秒；大体积本机 server 冷启动常常不够）。
 - `command` 写相对路径时按**项目根**解析，例如 `tools/codebase-memory-mcp/codebase-memory-mcp.exe`（`tools/` 为本机副本，不入库）。
 - 配置里的相对路径（`skills_dirs` / `memory_dir` / `plugins_dir`）一律以 `.oh/` 为根；绝对路径原样使用。
 - 目录名可用环境变量 `OH_DIR` 覆盖（例如测试隔离）。
@@ -113,9 +117,27 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 | `agents/` `tasks/` `cron/` | 子 Agent 派发、自主 Agent（s17：身份重注入 / shutdown_request / consume_lead_inbox）、任务看板（s12）、定时任务 |
 | `plugins/` `commands/` | 插件注册、内置斜杠命令 |
 
+## 用户视角 e2e（`tests/e2e/`）
+
+以真实子进程 / 真实终端（ConPTY）驱动 CLI，覆盖 19 个斜杠命令、39 个工具、8 个子系统：
+
+```bash
+uv run pytest tests/e2e                 # 确定性部分（命令、插件、技能、cron、持久化、参数）
+OH_E2E_LIVE=1 uv run pytest tests/e2e   # 加上真实 DeepSeek 驱动工具的用例
+```
+
+- 每个用例在自己的临时工作目录里跑，状态落在 `<tmp>/.oh/`，不碰仓库根的 `.oh/`。
+- TTY 行为（Tab 补全、↑ 历史、双击 Esc、Ctrl+C/D、审批弹窗）用 pywinpty 开真实 ConPTY。
+- 限制：ConPTY 的字节流里没有 prompt_toolkit 的浮动区域（`/` 菜单、底部状态栏），
+  这两块用数据源断言（`match_commands` / `_status_text`）加人工观感验证，见
+  `tests/e2e/test_repl_tty.py` 顶部说明。
+
 ## 验证记录
 
-- `uv run pytest tests`：331 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
+- `uv run pytest tests`：336 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
+- `uv run pytest tests/e2e`：54 passed, 18 skipped（live 用例默认跳过）
+- `OH_E2E_LIVE=1 uv run pytest tests/e2e`：72 passed —— 19 个斜杠命令、39 个工具、
+  8 个子系统全部经真实 DeepSeek / 真实终端触发，另有假端点下的错误恢复路径，详见 `VERIFICATION.md`
 - 持久化/调度冒烟：跨进程 `/sessions` 载入会话、`MemorySave` 后新进程 `/memory` 可见、`*/1` cron 命令真实触发并写 `cron.log`。
 - 真实 LLM 冒烟：`uv run python -m openharness.cli "用 bash 工具列出当前目录的文件" --no-banner --max-turns 4`
   —— 模型自主调用 Glob/Read，权限询问正常弹出，回合上限生效。

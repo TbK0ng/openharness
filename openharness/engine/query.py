@@ -142,18 +142,28 @@ def run_query_sync(context: Context) -> str:
 run_sync = run_query_sync
 
 
-def run_query_in_thread(context: Context) -> str:
+def run_query_in_thread(context: Context, close_llm_after: bool = False) -> str:
     """在独立线程里跑 Agent Loop（线程内新建事件循环）。
 
-    与 run_query_sync 的区别：不关闭 context.llm（子 Agent 与父会话共享
+    与 run_query_sync 的区别：默认不关闭 context.llm（子 Agent 与父会话共享
     客户端，不能提前关闭）。供工具 / 团队在已运行的事件循环内阻塞调用。
+
+    `close_llm_after=True` 时在该线程自己的事件循环里关闭客户端——子 Agent
+    必须这样收尾：它的 httpx 客户端是在这个循环里创建的。
     """
     import threading
     box: dict = {}
 
     def _go():
+        async def _run():
+            try:
+                return await run_query(context)
+            finally:
+                if close_llm_after:
+                    await close_llm(context.llm)
+
         try:
-            box["text"] = asyncio.run(run_query(context))
+            box["text"] = asyncio.run(_run())
         except Exception as e:  # noqa: BLE001
             box["error"] = str(e)
 

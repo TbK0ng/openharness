@@ -171,7 +171,9 @@ def build_llm(config: dict) -> ChatOpenAI:
         model=m["model"],
         temperature=m.get("temperature", 0.2),
         timeout=timeout,
-        max_retries=m.get("max_retries", 2),
+        # 重试统一由 engine/recovery.py 负责：SDK 再自己重试一次会叠加放大，
+        # 也会把连续 5xx 吞掉，导致「连续故障切换备用模型」永远不会触发。
+        max_retries=0,
     )
 
 
@@ -185,13 +187,17 @@ def to_langchain_messages(messages: List[dict]) -> list:
         elif role == "user":
             out.append(HumanMessage(content=msg.get("content", "")))
         elif role == "assistant":
-            tool_calls = None
-            if msg.get("tool_calls"):
-                tool_calls = [
+            content = msg.get("content", "") or ""
+            raw_calls = msg.get("tool_calls") or []
+            if raw_calls:
+                out.append(AIMessage(content=content, tool_calls=[
                     {"name": tc["name"], "args": tc.get("arguments") or {}, "id": tc["id"]}
-                    for tc in msg["tool_calls"]
-                ]
-            out.append(AIMessage(content=msg.get("content", "") or "", tool_calls=tool_calls))
+                    for tc in raw_calls
+                ]))
+            else:
+                # 传 tool_calls=None 会被 langchain-core 的 pydantic 校验拒绝，
+                # 导致第二轮对话直接失败；没有工具调用时就不要带这个字段。
+                out.append(AIMessage(content=content))
         elif role == "tool":
             out.append(ToolMessage(content=msg.get("content", ""), tool_call_id=msg.get("tool_call_id", "")))
     return out
@@ -253,17 +259,20 @@ async def stream_response(context, max_tokens: int = None) -> LLMResponse:
     max_tokens: Path 1 升级后的输出上限（None 用模型默认）。
     """
     llm = context.llm
+    lc_messages = to_langchain_messages(
+        [{"role": "system", "content": context.system_prompt}] + context.messages
+    )
+    # 顺序很重要：bind_tools 之后必须再 bind，否则 model / max_tokens 会被丢掉
+    # （RunnableBinding.bind_tools 会重建绑定，前面的 kwargs 不保留）。
+    if context.tool_schemas:
+        llm = llm.bind_tools(context.tool_schemas)
     # Path 3：备用模型切换（recovery_state.current_model）
     st = getattr(context, "recovery_state", None)
     if st is not None and getattr(st, "current_model", None):
         llm = llm.bind(model=st.current_model)
     if max_tokens is not None:
         llm = llm.bind(max_tokens=max_tokens)
-    lc_messages = to_langchain_messages(
-        [{"role": "system", "content": context.system_prompt}] + context.messages
-    )
-    llm_with_tools = llm.bind_tools(context.tool_schemas) if context.tool_schemas else llm
-    ai = await llm_with_tools.ainvoke(lc_messages)
+    ai = await llm.ainvoke(lc_messages)
     response = _from_langchain(ai)
     if response.text:
         context.on_text(response.text)
