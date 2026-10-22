@@ -1,5 +1,6 @@
 """Test cli.py (ch.12 step 1): argument parsing, slash commands, interactive loop."""
 import io
+import os
 import shutil
 import sys
 import unittest
@@ -62,14 +63,77 @@ class TestSlashCommands(unittest.TestCase):
         self.assertIn("full-auto", cmd.fn("full-auto"))
         self.assertEqual(self.engine.permissions.mode, "full-auto")
 
-    def test_unknown_mode_raises_value_error(self):
-        with self.assertRaises(ValueError):
-            self.engine.commands.get("mode").fn("bogus")
+    def test_unknown_mode_reports_choices_and_keeps_mode(self):
+        before = self.engine.permissions.mode
+        out = self.engine.commands.get("mode").fn("bogus")
+        self.assertIn("未知权限模式", out)
+        self.assertIn("full-auto", out)
+        self.assertEqual(self.engine.permissions.mode, before)
+
+    def test_mode_without_args_lists_all_modes(self):
+        out = self.engine.commands.get("mode").fn("")
+        self.assertIn("当前权限模式: default", out)
+        for mode in ("default", "plan", "full-auto"):
+            self.assertIn(mode, out)
+        self.assertIn("/mode <模式>", out)
+
+    def test_mode_menu_number_switches_mode(self):
+        with mock.patch("openharness.engine.query_engine._is_tty",
+                        return_value=True), \
+             mock.patch("builtins.input", return_value="2"):
+            out = self.engine.commands.get("mode").fn("")
+        self.assertIn("plan", out)
+        self.assertEqual(self.engine.permissions.mode, "plan")
+
+    def test_mode_menu_cancel_keeps_mode(self):
+        with mock.patch("openharness.engine.query_engine._is_tty",
+                        return_value=True), \
+             mock.patch("builtins.input", return_value=""):
+            out = self.engine.commands.get("mode").fn("")
+        self.assertIn("未修改", out)
+        self.assertEqual(self.engine.permissions.mode, "default")
+
+    def test_permission_allow_adds_tool_to_session_allowlist(self):
+        out = self.engine.commands.get("permission").fn("allow Write")
+        self.assertIn("Write", out)
+        decision = self.engine.permissions.check(
+            "Write", {"file_path": "a", "content": "b"},
+            type("C", (), {"registry": self.engine.registry})())
+        self.assertEqual(decision.verdict, "allow")
+
+    def test_permission_save_persists_and_keeps_other_settings(self):
+        import json
+        settings = self.engine.oh_dir / "settings.json"
+        settings.write_text(json.dumps({"provider": "lmstudio"}), encoding="utf-8")
+        self.engine.commands.get("mode").fn("plan")
+        self.engine.commands.get("permission").fn("allow Write")
+
+        self.engine.commands.get("permission").fn("save")
+
+        saved = json.loads(settings.read_text(encoding="utf-8"))
+        self.assertEqual(saved["provider"], "lmstudio")
+        self.assertEqual(saved["permissions"]["mode"], "plan")
+        self.assertEqual(saved["permissions"]["allow_tools"], ["Write"])
+
+    def test_permission_reset_clears_session_allows(self):
+        self.engine.commands.get("permission").fn("allow Write")
+        self.engine.commands.get("permission").fn("reset")
+        self.assertEqual(self.engine.permissions.allowed_tools, set())
+
+    def test_saved_permissions_load_in_a_new_engine(self):
+        self.engine.commands.get("permission").fn("allow Write")
+        self.engine.commands.get("mode").fn("plan")
+        self.engine.commands.get("permission").fn("save")
+
+        fresh = Engine(cwd=str(self.dir))
+        self.assertEqual(fresh.permissions.mode, "plan")
+        self.assertIn("Write", fresh.permissions.allowed_tools)
 
     def test_tools_command_lists_all_tools(self):
         out = self.engine.commands.get("tools").fn("")
         self.assertIn("Read", out)
-        self.assertIn("36", out)
+        self.assertIn(str(len(self.engine.registry.list_tools())), out)
+        self.assertIn("MemorySave", out)
 
     def test_skills_and_memory_commands_render(self):
         self.assertTrue(self.engine.commands.get("skills").fn(""))
@@ -87,6 +151,10 @@ class TestInteractiveLoop(unittest.TestCase):
 
     def setUp(self):
         self.dir = _fresh_dir("cli_loop")
+        # 测试环境下禁用 prompt_toolkit，强制走 builtins.input 分支
+        patcher = mock.patch.dict(os.environ, {"OPENHARNESS_PLAIN_INPUT": "1"})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_exit_keyword_ends_session(self):
         with mock.patch("builtins.input", side_effect=["exit"]), \

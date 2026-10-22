@@ -34,6 +34,7 @@ class PermissionDecision:
 class PermissionChecker:
     def __init__(self, config: dict) -> None:
         self.mode: str = config.get("permission_mode") or config.get("mode") or "default"
+        self.allowed_tools: set = set(config.get("allow_tools", []))
         self.denied_tools: set = set(config.get("deny_tools", []))
         self.deny_paths: List[str] = list(config.get("deny_paths", []))
         self.deny_commands: List[str] = list(config.get("deny_commands", []))
@@ -46,6 +47,20 @@ class PermissionChecker:
 
     def set_denied_tools(self, names) -> None:
         self.denied_tools = set(names)
+
+    # ---- 会话级白名单（审批时按 a，或 /permission allow） ----------------
+    def allow_tool(self, name: str) -> None:
+        self.allowed_tools.add(name)
+
+    def deny_tool(self, name: str) -> None:
+        self.denied_tools.add(name)
+
+    def forget_tool(self, name: str) -> None:
+        self.allowed_tools.discard(name)
+        self.denied_tools.discard(name)
+
+    def clear_allows(self) -> None:
+        self.allowed_tools.clear()
 
     def add_path_rule(self, pattern: str) -> None:
         self.deny_paths.append(pattern)
@@ -103,6 +118,11 @@ class PermissionChecker:
         if self.mode == "full-auto":
             return PermissionDecision(ALLOW, reason="full-auto mode")
 
+        # 会话白名单：审批时按 a 或 /permission allow 后不再询问。
+        # 注意顺序在 plan 之后，确保 plan 模式的只读约束不能被白名单绕过。
+        if tool_name in self.allowed_tools:
+            return PermissionDecision(ALLOW, reason="tool is allow-listed for this session")
+
         # default 模式
         if read_only:
             return PermissionDecision(ALLOW, reason="default mode: read-only tool")
@@ -110,7 +130,7 @@ class PermissionChecker:
         prompt = (
             f"Permission required [{self.mode}] tool '{tool_name}'\n"
             f"parameters: {self._shorten(params)}\n"
-            f"Allow this operation? [y/N]"
+            f"Allow this operation? [y/N/a]  (a = always allow this tool in this session)"
         )
         return PermissionDecision(ASK_USER, reason="default mode: write operation", prompt=prompt)
 

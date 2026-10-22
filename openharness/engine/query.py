@@ -76,7 +76,9 @@ async def run_query(context: Context) -> str:
 
         # 第 2 步：LLM 返回响应——文本（任务完成）或工具调用
         if not response.has_tool_calls:
-            # 第 5 步：任务完成，返回最终响应
+            # 第 5 步：任务完成，返回最终响应。
+            # 多轮会话需要把回复写回历史，否则下一轮模型只看到连续的 user 消息。
+            context.messages.append({"role": "assistant", "content": response.text})
             return response.text
 
         # 第 3 步：权限检查 + 执行工具，把结果回传给 LLM
@@ -129,6 +131,9 @@ def run_query_sync(context: Context) -> str:
             return await run_query(context)
         finally:
             await close_llm(context.llm)
+            # 事件循环随 asyncio.run 结束，底层 httpx 客户端不能跨循环复用；
+            # 下一轮由 Engine.begin_turn() 重建客户端。
+            context.llm_closed = True
 
     return asyncio.run(_run())
 

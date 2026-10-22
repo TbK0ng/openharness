@@ -25,6 +25,7 @@ from .multi_agent import AgentTool, SendMessageTool
 from .task_tools import TaskCreateTool, TaskGetTool, TaskListTool, TaskUpdateTool, TaskStopTool
 from .mcp_tools import MCPTool, ListMcpResourcesTool, ReadMcpResourceTool
 from .cron_tools import CronCreateTool, CronListTool, CronDeleteTool
+from .memory_tools import MemorySaveTool, MemorySearchTool, MemoryDeleteTool
 from .meta_todo import TodoWriteTool
 from .meta_compact import CompactTool
 from .task_board_tools import (
@@ -48,6 +49,8 @@ BUILTIN_TOOLS = [
     TaskCreateTool, TaskGetTool, TaskListTool, TaskUpdateTool, TaskStopTool,
     # 任务看板（s12）
     CreateTaskTool, ListTasksTool, GetTaskTool, ClaimTaskTool, CompleteTaskTool,
+    # 长期记忆（第 9 章）
+    MemorySaveTool, MemorySearchTool, MemoryDeleteTool,
     # MCP
     MCPTool, ListMcpResourcesTool, ReadMcpResourceTool,
     # 定时任务

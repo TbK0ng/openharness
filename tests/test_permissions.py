@@ -57,6 +57,44 @@ class TestFullAuto(unittest.TestCase):
         self.assertEqual(d.verdict, ALLOW)
 
 
+class TestAllowList(unittest.TestCase):
+    """审批时按 a（或 /permission allow）后，同类工具不再弹 y/n。"""
+
+    def test_allow_tool_skips_ask(self):
+        ctx, _ = make_context(_tmpdir(), mode="default")
+        ctx.permissions.allow_tool("Write")
+        d = ctx.permissions.check("Write", {"file_path": "a", "content": "b"}, ctx)
+        self.assertEqual(d.verdict, ALLOW)
+        self.assertIn("allow-listed", d.reason)
+
+    def test_allow_tools_from_config(self):
+        ctx, _ = make_context(_tmpdir(), mode="default",
+                             config={"allow_tools": ["Write"]})
+        d = ctx.permissions.check("Write", {"file_path": "a", "content": "b"}, ctx)
+        self.assertEqual(d.verdict, ALLOW)
+
+    def test_plan_mode_still_denies_allowlisted_write(self):
+        ctx, _ = make_context(_tmpdir(), mode="plan")
+        ctx.permissions.allow_tool("Write")
+        d = ctx.permissions.check("Write", {"file_path": "a", "content": "b"}, ctx)
+        self.assertEqual(d.verdict, DENY)
+
+    def test_deny_beats_allow(self):
+        ctx, _ = make_context(_tmpdir(), mode="default")
+        ctx.permissions.allow_tool("Write")
+        ctx.permissions.deny_tool("Write")
+        d = ctx.permissions.check("Write", {"file_path": "a", "content": "b"}, ctx)
+        self.assertEqual(d.verdict, DENY)
+
+    def test_forget_tool_removes_both_lists(self):
+        ctx, _ = make_context(_tmpdir(), mode="default")
+        ctx.permissions.allow_tool("Write")
+        ctx.permissions.deny_tool("Write")
+        ctx.permissions.forget_tool("Write")
+        self.assertEqual(ctx.permissions.check(
+            "Write", {"file_path": "a", "content": "b"}, ctx).verdict, ASK_USER)
+
+
 class TestModeSwitch(unittest.TestCase):
     def test_set_mode(self):
         ctx, _ = make_context(_tmpdir(), mode="default")

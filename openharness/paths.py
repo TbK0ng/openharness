@@ -6,12 +6,17 @@
 
     .oh/
     ├── settings.json      # 配置
+    ├── mcp.json           # MCP 服务器
     ├── data/cron.json     # 定时任务
+    ├── data/cron.log      # 定时任务触发日志
+    ├── sessions/          # 已保存会话（每轮自动落盘）
     ├── memory/            # 记忆条目
     ├── MEMORY.md          # 记忆索引
-    ├── .tasks/            # 任务看板
+    ├── .tasks/            # 任务看板（依赖 DAG）
+    ├── tasks/             # 后台任务历史
     ├── worktrees/         # 隔离工作区
-    └── hooks.log          # hook 日志
+    ├── plugins/           # 插件
+    └── skills/            # 技能
 
 `OH_DIR` 环境变量可覆盖目录名（默认 ".oh"），便于测试隔离。
 """

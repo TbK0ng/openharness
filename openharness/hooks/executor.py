@@ -243,8 +243,12 @@ async def execute_tool_with_hooks(context, tool_call: dict) -> ToolResult:
         return ToolResult(error=f"权限不足: {decision.reason}")
     if decision.verdict == "ask_user":
         context.on_event(decision.prompt)
-        answer = context.ask_user(decision.prompt)
-        if answer.strip().lower() not in ("y", "yes"):
+        answer = (context.ask_user(decision.prompt) or "").strip().lower()
+        if answer in ("a", "always", "all"):
+            # 本会话白名单：后续同类工具调用不再弹出审批。
+            context.permissions.allow_tool(name)
+            context.on_event(f"✅ 已在当前会话自动允许工具 {name}")
+        elif answer not in ("y", "yes"):
             return ToolResult(error="权限不足: 用户拒绝了该操作 (ask_user -> denied)")
 
     # 第 3 步：真正执行工具

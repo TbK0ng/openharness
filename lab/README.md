@@ -29,9 +29,14 @@ mkdir -p lab/.oh && cp examples/settings.example.json lab/.oh/settings.json
 ```
 lab/
 ├── .oh/              # 本工作区独立的配置与运行时状态（gitignored）
+│   └── skills/       # 测试用的技能（当前是 .agents/skills 的副本）
 ├── notes.md          # 供 Agent 读写的示例文件
 ├── src/              # 示例代码，供 Agent 分析/修改
 └── README.md
 ```
 
 `lab/` 本身入库，`lab/.oh/` 不入库。
+
+技能只在 lab 里当测试素材用：项目根 `.oh/` 不放技能，免得开发用技能（`.agents/skills`）
+被当成产品技能加载。需要时从 `.agents/skills` 复制到 `lab/.oh/skills`：
+`uv run python -m openharness.cli --cwd lab "/skills"` 能看到它们。

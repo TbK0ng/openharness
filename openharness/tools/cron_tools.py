@@ -29,13 +29,19 @@ class CronCreateTool(BaseTool):
         mgr = context.cron
         if mgr is None:
             return ToolResult(error="cron subsystem not available")
-        task = mgr.create(
-            schedule=params.get("schedule", ""),
-            kind=params.get("kind", "command"),
-            command=params.get("command", ""),
-            prompt=params.get("prompt", ""),
-        )
-        return ToolResult(output=f"Created cron job {task.job_id}: {task}")
+        try:
+            task = mgr.create(
+                schedule=params.get("schedule", ""),
+                kind=params.get("kind", "command"),
+                command=params.get("command", ""),
+                prompt=params.get("prompt", ""),
+            )
+        except ValueError as exc:
+            return ToolResult(error=str(exc))
+        mgr.start()   # 保证即使不在 CLI 主循环里也能触发
+        context.display(f"⏰ 定时任务已创建: {task.job_id}")
+        return ToolResult(output=f"Created cron job {task.job_id}: {task} "
+                                 "(scheduler running)")
 
 
 class CronListTool(BaseTool):

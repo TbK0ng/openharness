@@ -167,10 +167,16 @@ class TaskManager:
 
         def _run():
             from ..agents.team import SubTask, build_sub_context
+            from ..engine.llm import build_llm
             from ..engine.query import run_sync
             sub_task = SubTask(agent_type="general-purpose", description=description)
             sub_task.agent_id = task.task_id
             ctx = build_sub_context(context, sub_task)
+            # 独立客户端：run_sync() 会关闭 ctx.llm，不能连带关掉父会话的客户端。
+            try:
+                ctx.llm = build_llm(getattr(context, "config", {}) or {})
+            except Exception:  # noqa: BLE001 - 保留共享客户端作为降级路径
+                pass
             ctx.messages.append({"role": "user", "content": prompt})
             try:
                 task.output = run_sync(ctx)

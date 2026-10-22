@@ -68,6 +68,18 @@ class TestHookFlow(unittest.TestCase):
         result = asyncio.run(execute_tool_with_hooks(ctx, tc))
         self.assertFalse(result.is_error)
 
+    def test_always_answer_allowlists_tool_for_the_session(self):
+        ctx, state = make_context(_tmp(), mode="default", ask_answer="a")
+        tc = {"name": "Write", "arguments": {"file_path": "a", "content": "b"}, "id": "c1"}
+
+        first = asyncio.run(execute_tool_with_hooks(ctx, tc))
+        self.assertFalse(first.is_error)
+        self.assertIn("Write", ctx.permissions.allowed_tools)
+
+        second = asyncio.run(execute_tool_with_hooks(ctx, tc))
+        self.assertFalse(second.is_error)
+        self.assertEqual(len(state["asks"]), 1)  # 第二次不再询问
+
     def test_tool_exception_captured(self):
         ctx, state = make_context(_tmp(), mode="full-auto")
         tc = {"name": "Explode", "arguments": {}, "id": "c1"}

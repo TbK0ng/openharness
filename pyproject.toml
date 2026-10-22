@@ -8,6 +8,7 @@ dependencies = [
     "httpx>=0.28",
     "langchain-core>=1.6",
     "langchain-openai>=1.6",
+    "prompt-toolkit>=3.0.53",
 ]
 keywords = ["agent", "langchain", "llm", "coding-assistant"]
 classifiers = [

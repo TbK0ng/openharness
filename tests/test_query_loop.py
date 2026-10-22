@@ -60,7 +60,8 @@ class TestToolCallProtocol(unittest.TestCase):
 
         self.assertEqual(out, "done")
         roles = [m["role"] for m in ctx.messages]
-        self.assertEqual(roles, ["assistant", "tool"])
+        # tool call → tool result → final assistant reply (kept for multi-turn)
+        self.assertEqual(roles, ["assistant", "tool", "assistant"])
 
         # The assistant message must carry the same tool_call id the tool
         # message answers.
@@ -94,7 +95,8 @@ class TestToolCallProtocol(unittest.TestCase):
         ]
         ctx, out, _ = _run(responses)
 
-        assistants = [m for m in ctx.messages if m["role"] == "assistant"]
+        assistants = [m for m in ctx.messages
+                      if m["role"] == "assistant" and m.get("tool_calls")]
         self.assertEqual(len(assistants), 1)
         self.assertEqual([tc["id"] for tc in assistants[0]["tool_calls"]], ["a", "b"])
         self.assertEqual([m["tool_call_id"] for m in ctx.messages if m["role"] == "tool"],
@@ -102,11 +104,11 @@ class TestToolCallProtocol(unittest.TestCase):
 
 
 class TestLoopTermination(unittest.TestCase):
-    def test_plain_text_response_returns_immediately(self):
+    def test_plain_text_response_returns_immediately_and_is_recorded(self):
         ctx, out, scripted = _run([LLMResponse(text="hello", stop_reason="end_turn")])
 
         self.assertEqual(out, "hello")
-        self.assertEqual(ctx.messages, [])
+        self.assertEqual(ctx.messages, [{"role": "assistant", "content": "hello"}])
         self.assertEqual(len(scripted.seen), 1)
 
     def test_max_turns_stops_the_loop(self):

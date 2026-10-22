@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from openharness.tasks.manager import Task, TaskManager
 
@@ -113,6 +114,31 @@ class TestCommandTasks(unittest.TestCase):
         self.assertEqual(updated.status, "paused")
         self.assertIn("base", updated.output)
         self.assertIn("[note] checkpoint", updated.output)
+
+
+class TestBackgroundAgent(unittest.TestCase):
+    def test_agent_task_uses_its_own_llm(self):
+        import openharness.engine.query_engine as qe
+        from openharness.engine.query_engine import Engine
+
+        with mock.patch.object(qe, "build_llm", return_value=object()):
+            engine = Engine(cwd=str(Path(tempfile.mkdtemp(prefix="oh_test_"))))
+            ctx = engine.create_context()
+        parent_llm = ctx.llm
+        seen = {}
+
+        def fake_run(sub):
+            seen["llm"] = sub.llm
+            return "agent-done"
+
+        with mock.patch("openharness.engine.query.run_sync", fake_run), \
+             mock.patch("openharness.engine.llm.build_llm",
+                        return_value=object()):
+            task = engine.tasks.create_agent(ctx, "d", "p")
+            _wait(task)
+
+        self.assertEqual(task.output, "agent-done")
+        self.assertIsNot(seen["llm"], parent_llm)
 
 
 class TestTaskPersistence(unittest.TestCase):
