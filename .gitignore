@@ -21,7 +21,7 @@ hook_log*
 /settings.json
 /plugins/
 
-# probe scratch & test runtime artifacts
+# probe scratch & test runtime artifacts（测试源码 tests/ 仍然入库）
 _probe/
 _tmp_tests/
 oh_hooks_*/
@@ -29,8 +29,32 @@ oh_test_*/
 tmp*/
 pytest-cache-files-*/
 .pytest_cache/
+/scripts/hello-every-5s.ps1
+/hello.log
 
-# Local MCP server binary (installed via tools/codebase-memory-mcp/install.ps1)
+# 覆盖率与 lint/type-check 缓存
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+
+# 编辑器 / 操作系统杂项
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# 临时/备份文件
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# Local MCP server binary (copied from %LOCALAPPDATA%\Programs\codebase-memory-mcp)
 tools/codebase-memory-mcp/
 cbm_temp/
 
