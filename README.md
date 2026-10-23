@@ -92,7 +92,6 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 .
 ├── src/openharness/      # 框架源码（src 布局，`pythonpath = ["src"]`）
 ├── tests/                # 单元/集成测试，按 src 子系统镜像分目录
-├── docs/                 # 验证记录等文档
 ├── pyproject.toml        # 打包与依赖
 ├── uv.lock               # 锁定依赖
 ├── README.md
@@ -166,7 +165,7 @@ OH_E2E_LIVE=1 uv run pytest tests/e2e   # 加上真实 DeepSeek 驱动工具的�
 - `uv run pytest tests`：390 passed, 23 skipped（18 个 e2e live 用例默认跳过，5 个需要本机 LM Studio 可达）
 - `uv run pytest tests/e2e`：54 passed, 18 skipped（live 用例默认跳过）
 - `OH_E2E_LIVE=1 uv run pytest tests/e2e`：72 passed —— 19 个斜杠命令、39 个工具、
-  8 个子系统全部经真实 DeepSeek / 真实终端触发，另有假端点下的错误恢复路径，详见 `docs/VERIFICATION.md`
+  8 个子系统全部经真实 DeepSeek / 真实终端触发，另有假端点下的错误恢复路径
 - 持久化/调度冒烟：跨进程 `/sessions` 载入会话、`MemorySave` 后新进程 `/memory` 可见、`*/1` cron 命令真实触发并写 `cron.log`。
 - 真实 LLM 冒烟：`uv run python -m openharness.cli "用 bash 工具列出当前目录的文件" --no-banner --max-turns 4`
   —— 模型自主调用 Glob/Read，权限询问正常弹出，回合上限生效。
