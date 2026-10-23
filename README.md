@@ -44,8 +44,8 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
             [--model NAME] [--mode default|plan|full-auto] [--max-turns N] [--no-banner]
 ```
 
-- 交互命令：`/help` `/tools` `/memory` `/mode` `/tasks` `/agents` `/mcp` `/skills` `/cron` `/init` `/clear` `/exit`，以及会话/权限命令 `/new` `/fork` `/side` `/sessions` `/switch` `/rewind` `/permission`（见 `engine/query_engine.py::_register_builtin_commands`）。`/help <命令>` 看单条用法。
-- 交互体验（`openharness/repl.py`）：输入 `/` 立即弹出命令菜单并显示说明，继续输入按前缀过滤；`Tab` 补全命令与参数（如 `/mode fu<Tab>` → `/mode full-auto`）；`↑`/`↓` 翻历史（存于 `.oh/history`，跨会话保留）；`Ctrl+C` 取消当前输入，`Ctrl+D` 退出；**双击 `Esc` 回退最后一轮**并把原输入放回编辑框（`/rewind` 等价；只回退消息历史，不撤销已产生的文件改动）；底部状态栏显示权限模式 / 模型 / 工具数 / 工作目录 / 当前会话。
+- 交互命令：`/help` `/tools` `/memory` `/mode` `/tasks` `/agents` `/mcp` `/skills` `/cron` `/init` `/clear` `/exit`，以及会话/权限命令 `/new` `/fork` `/side` `/sessions` `/switch` `/rewind` `/permission`（见 `src/openharness/engine/query_engine.py::_register_builtin_commands`）。`/help <命令>` 看单条用法。
+- 交互体验（`src/openharness/ui/repl.py`）：输入 `/` 立即弹出命令菜单并显示说明，继续输入按前缀过滤；`Tab` 补全命令与参数（如 `/mode fu<Tab>` → `/mode full-auto`）；`↑`/`↓` 翻历史（存于 `.oh/history`，跨会话保留）；`Ctrl+C` 取消当前输入，`Ctrl+D` 退出；**双击 `Esc` 回退最后一轮**并把原输入放回编辑框（`/rewind` 等价；只回退消息历史，不撤销已产生的文件改动）；底部状态栏显示权限模式 / 模型 / 工具数 / 工作目录 / 当前会话。
 - 多轮会话：同一个会话内保留完整消息历史（含最终 assistant 回复），`/new` 开新会话、`/fork` 复制当前历史到分支、`/side` 基于快照开临时会话（`/side off` 丢弃并返回）。main/fork 每轮结束自动保存到 `.oh/sessions/<id>.json`，重启后 `/sessions` 仍可见，`/switch <id|前缀|名称>` 载入继续；side 不落盘。
 - 长期记忆：Agent 通过 `MemorySave` / `MemorySearch` / `MemoryDelete` 工具维护 `.oh/memory/*.md` 与 `.oh/MEMORY.md`，索引每轮注入 system prompt；`/memory` 查看当前索引。
 - 定时任务：`/cron add <分 时 日 月 周> <command|agent> <内容>` 创建，`/cron list` 查看，`/cron run <id>` 立即触发，`/cron delete <id>` 删除。调度线程随 CLI 启动，输出写入 `.oh/data/cron.log`；**只在 CLI 进程运行期间触发**（`CronCreate` 工具创建任务时也会启动调度器）。
@@ -90,32 +90,61 @@ openharness [prompt...] [--cwd DIR] [--config PATH] [--provider lmstudio|deepsee
 
 ```
 .
-├── openharness/          # 框架源码
-├── tests/                # 单元/集成测试
-├── conftest.py           # pytest 配置
+├── src/openharness/      # 框架源码（src 布局，`pythonpath = ["src"]`）
+├── tests/                # 单元/集成测试，按 src 子系统镜像分目录
+├── docs/                 # 验证记录等文档
 ├── pyproject.toml        # 打包与依赖
 ├── uv.lock               # 锁定依赖
 ├── README.md
 └── .gitignore
 ```
 
+```bash
+uv run python -m openharness "列出当前目录的文件"   # 等价于 openharness / -m openharness.cli
+```
+
 `.oh/` 是运行时状态目录，按需创建，不入库。
 
 ## 结构
 
+```
+src/openharness/
+├── __main__.py          # python -m openharness
+├── cli.py               # argparse 入口、单次请求 / 交互循环
+├── api/                 # registry.py 供应商预设 + client.py LangChain 装配与流式调用
+├── config/              # paths.py（.oh/ 约定）+ settings.py（默认配置 / 合并 / 持久化）
+├── engine/              # query.py Agent Loop + query_engine.py Engine 装配 + recovery.py
+├── prompts/             # system prompt 组装（记忆索引 + 技能清单 + 准则）
+├── services/            # session_storage.py 会话落盘、compact.py autoCompact、cron.py 调度
+├── ui/                  # repl.py prompt_toolkit 输入、output.py 终端输出/编码降级
+├── tools/               # base.py（BaseTool/ToolRegistry）+ 每个工具一个 *_tool.py
+├── permissions/ hooks/ commands/ mcp/
+├── memory/ skills/ plugins/
+├── tasks/               # manager.py 后台任务、board.py 任务看板 DAG、types.py
+└── swarm/               # team.py 子 Agent、autonomous.py 自主 Teammate
+```
+
 | 模块 | 职责 |
 |---|---|
-| `engine/llm.py` | 供应商预设（DeepSeek / LM Studio）、LangChain ChatOpenAI 装配、消息转换 |
+| `api/registry.py` | 供应商预设（DeepSeek / LM Studio）、配置解析、模型发现 |
+| `api/client.py` | LangChain ChatOpenAI 装配、消息转换、`stream_response` / `llm_complete` |
 | `engine/query.py` | Agent Loop：LLM → 工具调用 → 观察 → 再推理，回合上限控制 |
-| `engine/session.py` | 会话模型与落盘：多轮历史、`/new` `/fork` `/side`、回退与跨进程切换 |
-| `engine/compact.py` | autoCompact（s08）：LLM 摘要 / 熔断器 / 紧急压缩 |
+| `engine/query_engine.py` | Engine 装配：子系统初始化、工具/命令注册、会话切换、`/` 命令实现 |
 | `engine/recovery.py` | 错误恢复（s11）：重试 / 指数退避 / Path 1 输出截断升级 / Path 3 备用模型切换 |
-| `tools/` | bash / 文件读写编辑 / glob / grep / web / notebook / 记忆（MemorySave/Search/Delete）/ 定时任务 / 元工具（plan、ask_user、tool_search、worktree、todo、compact）/ 任务看板 / 多 Agent |
+| `services/session_storage.py` | 会话模型与落盘：多轮历史、`/new` `/fork` `/side`、回退与跨进程切换 |
+| `services/compact.py` | autoCompact（s08）：LLM 摘要 / 熔断器 / 紧急压缩 |
+| `services/cron.py` | 定时任务持久化与调度线程（command / agent） |
+| `prompts/system_prompt.py` | 每轮 system prompt：身份/环境 → 记忆索引 → 技能清单 → 准则 |
+| `ui/repl.py` `ui/output.py` | 行编辑（补全 / 历史 / Esc Esc）、状态栏、编码安全的终端输出 |
+| `tools/` | 39 个内置工具，按类名一文件：`bash_tool.py`、`file_read_tool.py`、`todo_write_tool.py`… |
 | `permissions/` | 三级护栏：default / plan / full-auto，deny 列表按工具·路径·命令 |
 | `mcp/` | MCP server 客户端（stdio），外部工具接入 |
 | `skills/` `memory/` `hooks/` | 技能加载、长期记忆、事件钩子 |
-| `agents/` `tasks/` `cron/` | 子 Agent 派发、自主 Agent（s17：身份重注入 / shutdown_request / consume_lead_inbox）、任务看板（s12）、定时任务 |
+| `swarm/` `tasks/` | 子 Agent 派发、自主 Agent（s17）、后台任务（s13）、任务看板（s12） |
 | `plugins/` `commands/` | 插件注册、内置斜杠命令 |
+
+`tests/` 与源码一一对应：`tests/test_api/`、`test_engine/`、`test_services/`、`test_tools/`、
+`test_swarm/`、`test_tasks/`、`test_cli/`、`test_ui/` 等；跨子系统的用户视角用例在 `tests/e2e/`。
 
 ## 用户视角 e2e（`tests/e2e/`）
 
@@ -134,12 +163,12 @@ OH_E2E_LIVE=1 uv run pytest tests/e2e   # 加上真实 DeepSeek 驱动工具的�
 
 ## 验证记录
 
-- `uv run pytest tests`：336 passed, 5 skipped（跳过的 5 个用例需要本机 LM Studio 可达）
+- `uv run pytest tests`：390 passed, 23 skipped（18 个 e2e live 用例默认跳过，5 个需要本机 LM Studio 可达）
 - `uv run pytest tests/e2e`：54 passed, 18 skipped（live 用例默认跳过）
 - `OH_E2E_LIVE=1 uv run pytest tests/e2e`：72 passed —— 19 个斜杠命令、39 个工具、
-  8 个子系统全部经真实 DeepSeek / 真实终端触发，另有假端点下的错误恢复路径，详见 `VERIFICATION.md`
+  8 个子系统全部经真实 DeepSeek / 真实终端触发，另有假端点下的错误恢复路径，详见 `docs/VERIFICATION.md`
 - 持久化/调度冒烟：跨进程 `/sessions` 载入会话、`MemorySave` 后新进程 `/memory` 可见、`*/1` cron 命令真实触发并写 `cron.log`。
 - 真实 LLM 冒烟：`uv run python -m openharness.cli "用 bash 工具列出当前目录的文件" --no-banner --max-turns 4`
   —— 模型自主调用 Glob/Read，权限询问正常弹出，回合上限生效。
 - Agent Loop 离线冒烟：用假 LLM 注入 ToolCall，验证「调用工具 → 结果回填 → 下一回合 → 返回文本」全链路。
-- 测试结束自动清理 `_tmp_tests/`、`tmp*/`、`oh_test_*/`、`oh_hooks_*/`（见 `conftest.py`）。
+- 测试结束自动清理 `_tmp_tests/`、`tmp*/`、`oh_test_*/`、`oh_hooks_*/`（见 `tests/conftest.py`）。

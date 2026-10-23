@@ -4,12 +4,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from openharness.hooks.executor import HookManager
 from openharness.permissions.checker import PermissionChecker
-from openharness.tools.base import BaseTool, ToolResult
-from openharness.tools.registry import ToolRegistry
+from openharness.tools.base import BaseTool, ToolRegistry, ToolResult
 
 
 class EchoTool(BaseTool):

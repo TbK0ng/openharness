@@ -111,7 +111,7 @@ def test_mcp_server_connects_and_exposes_tools(tmp_path):
     (oh(ws)).mkdir(parents=True, exist_ok=True)
     (oh(ws) / "mcp.json").write_text(json.dumps({"mcpServers": {
         "stub": {"command": sys.executable,
-                 "args": [str(ROOT / "tests" / "mcp_stub_server.py")]}}}),
+                 "args": [str(ROOT / "tests" / "fixtures" / "fake_mcp_server.py")]}}}),
         encoding="utf-8")
     r = run_cli([], ws, input_text="/mcp\n/tools\n/exit\n", timeout=120)
     assert "stub: connected" in r.out, r.text

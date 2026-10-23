@@ -48,7 +48,7 @@ def test_prompt_is_rendered_in_a_real_terminal(tmp_path):
 
 def test_status_bar_reports_mode_model_tools_and_session(tmp_path):
     engine = _engine(tmp_path)
-    from openharness.repl import _status_text
+    from openharness.ui.repl import _status_text
 
     text = _status_text(engine)
     assert "default" in text
@@ -58,7 +58,7 @@ def test_status_bar_reports_mode_model_tools_and_session(tmp_path):
 
 
 def test_slash_menu_data_covers_every_command(tmp_path):
-    from openharness.repl import match_commands
+    from openharness.ui.repl import match_commands
 
     engine = _engine(tmp_path)
     everything = match_commands(engine.commands.list(), "")

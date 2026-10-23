@@ -11,7 +11,7 @@ __pycache__/
 .agents/
 
 # 旧位置（保留忽略，便于从旧版本迁移）。
-# 注意锚定到根目录：`memory/` 会误伤 openharness/memory/ 包目录。
+# 注意锚定到根目录：`memory/` 会误伤 src/openharness/memory/ 包目录。
 /data/
 hook_log*
 *.log

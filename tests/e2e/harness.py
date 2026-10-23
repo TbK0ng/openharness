@@ -27,7 +27,7 @@ def oh(ws: Path) -> Path:
 
 def _env(extra: dict | None = None) -> dict:
     env = {k: v for k, v in os.environ.items() if k != "OH_DIR"}
-    env["PYTHONPATH"] = os.pathsep.join([str(ROOT), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
     env["PYTHONIOENCODING"] = "utf-8"
     # 强制走 input() 分支：管道环境下 prompt_toolkit 不可用，行为必须可预测
     env["OPENHARNESS_PLAIN_INPUT"] = "1"

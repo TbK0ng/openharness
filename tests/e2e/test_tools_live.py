@@ -14,7 +14,7 @@ from .harness import ROOT, has_live_key, oh, run_cli
 live = pytest.mark.live
 requires_live = pytest.mark.skipif(not has_live_key(), reason="需要 DEEPSEEK_API_KEY")
 
-MCP_STUB = ROOT / "tests" / "mcp_stub_server.py"
+MCP_STUB = ROOT / "tests" / "fixtures" / "fake_mcp_server.py"
 
 NOTEBOOK = {
     "cells": [
@@ -218,7 +218,7 @@ def test_mcp_tools(runs):
 def test_every_registered_tool_was_exercised(runs):
     """39 个工具必须每个都在这套 e2e 里被真实触发过。"""
     from openharness.tools import register_builtin_tools
-    from openharness.tools.registry import ToolRegistry
+    from openharness.tools.base import ToolRegistry
 
     reg = ToolRegistry()
     register_builtin_tools(reg)
